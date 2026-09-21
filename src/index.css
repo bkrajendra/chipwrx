@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Without this, native form controls (a <select>'s dropdown popup, scrollbars) default to
+   light-mode rendering regardless of the OS theme, while Tailwind's `dark:` utilities still
+   apply our (near-white) text color to elements like <option> — white text on the browser's
+   default white popup background. Declaring both schemes lets the browser pick a properly
+   contrasted native-control palette that matches `prefers-color-scheme`. */
+:root {
+  color-scheme: light dark;
+}

@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri v2 Linux build prerequisites: https://v2.tauri.app/start/prerequisites/
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # --jobs 2: linking this many binaries (the app itself, FakeCli, export_bindings,
+      # several integration test binaries — each pulling in Tauri/webview2/reqwest+rustls)
+      # at full parallelism has OOM'd link.exe locally; standard GitHub runners have
+      # similarly limited RAM, so cap it here too rather than finding out the hard way.
+      - name: cargo test
+        run: cargo test --manifest-path src-tauri/Cargo.toml --all-targets --jobs 2
+
+      - name: cargo clippy
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --jobs 2 -- -D warnings
+
+      - name: tsc --noEmit
+        run: npm run typecheck
+
+      - name: vitest
+        run: npm run test
+
+      - name: ts-rs bindings drift check
+        run: npm run check:bindings
