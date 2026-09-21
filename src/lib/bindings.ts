@@ -13,7 +13,7 @@ export type ProcSummary = { id: ProcId, label: string, kind: ProcKind, startedAt
 
 export type PermissionDenial = { tool: string, reason: string, };
 
-export type AppError = { "code": "TOOL_MISSING", tool: string, installAction: boolean, } | { "code": "TOOL_TOO_OLD", tool: string, found: string, minimum: string, } | { "code": "CLAUDE_UNAUTHENTICATED" } | { "code": "CLAUDE_PERMISSION_DENIED", denials: Array<PermissionDenial>, } | { "code": "CLAUDE_INTERRUPTED", sessionId: string, } | { "code": "NETWORK_UNAVAILABLE", host: string, } | { "code": "PIO_COMMAND_FAILED", argv: Array<string>, exitCode: number, tail: string, } | { "code": "CLAUDE_PROCESS_FAILED", exitCode: number, tail: string, } | { "code": "BUILD_FAILED", defects: number, } | { "code": "PORT_BUSY", port: string, heldBy: string, } | { "code": "PORT_DISAPPEARED", port: string, } | { "code": "NOT_A_PIO_PROJECT", path: string, } | { "code": "INI_PARSE", path: string, line: number | null, message: string, } | { "code": "INI_CHANGED_ON_DISK", path: string, } | { "code": "WORKSPACE_UNTRUSTED", hooks: Array<string>, mcpServers: Array<string>, } | { "code": "IO", message: string, };
+export type AppError = { "code": "TOOL_MISSING", tool: string, installAction: boolean, } | { "code": "TOOL_TOO_OLD", tool: string, found: string, minimum: string, } | { "code": "CLAUDE_UNAUTHENTICATED" } | { "code": "CLAUDE_PERMISSION_DENIED", denials: Array<PermissionDenial>, } | { "code": "CLAUDE_INTERRUPTED", sessionId: string, } | { "code": "NETWORK_UNAVAILABLE", host: string, } | { "code": "PIO_COMMAND_FAILED", argv: Array<string>, exitCode: number, tail: string, } | { "code": "CLAUDE_PROCESS_FAILED", exitCode: number, tail: string, } | { "code": "BUILD_FAILED", defects: number, } | { "code": "PORT_BUSY", port: string, heldBy: string, } | { "code": "PORT_DISAPPEARED", port: string, } | { "code": "NOT_A_PIO_PROJECT", path: string, } | { "code": "INI_PARSE", path: string, line: number | null, message: string, } | { "code": "INI_CHANGED_ON_DISK", path: string, } | { "code": "WORKSPACE_UNTRUSTED", hooks: Array<string>, mcpServers: Array<string>, } | { "code": "SNAPSHOT_FAILED", message: string, } | { "code": "IO", message: string, };
 
 export type ProbeResult = { "status": "ok", version: string, path: string | null, detail: string | null, } | { "status": "missing", installAvailable: boolean, } | { "status": "degraded", reason: string, remediation: Remediation | null, } | { "status": "error", detail: string, } | { "status": "probing" };
 
@@ -70,7 +70,14 @@ export type AdvancedSettings = { keepProcessLogs: boolean,
  */
 allowUnrestrictedPolicy: boolean, };
 
-export type GlobalSettings = { schemaVersion: number, toolchain: ToolchainSettings, claude: ClaudeSettings, pipeline: PipelineSettings, monitor: MonitorSettings, logs: LogSettings, editor: EditorSettings, appearance: AppearanceSettings, network: NetworkSettings, advanced: AdvancedSettings, };
+export type GlobalSettings = { schemaVersion: number, 
+/**
+ * The app version that last wrote this file — compared at startup against the
+ * running app's own version to drive the `apply_version_migration` reset. `None`
+ * covers both a fresh install and a file written before this field existed; either
+ * way, resetting is the safe default (`DATA-MODEL.md` §3).
+ */
+lastAppVersion: string | null, toolchain: ToolchainSettings, claude: ClaudeSettings, pipeline: PipelineSettings, monitor: MonitorSettings, logs: LogSettings, editor: EditorSettings, appearance: AppearanceSettings, network: NetworkSettings, advanced: AdvancedSettings, };
 
 export type GlobalSettingsPatch = { toolchain: ToolchainSettings | null, claude: ClaudeSettings | null, pipeline: PipelineSettings | null, monitor: MonitorSettings | null, logs: LogSettings | null, editor: EditorSettings | null, appearance: AppearanceSettings | null, network: NetworkSettings | null, advanced: AdvancedSettings | null, };
 
@@ -136,6 +143,19 @@ mcpServers: Array<string>,
  */
 agents: Array<string>, };
 
+export type SnapshotId = string;
+
+export type ChangeStatus = "added" | "modified" | "deleted" | "renamed";
+
+export type FileChange = { path: string, status: ChangeStatus, additions: number, deletions: number, 
+/**
+ * Drives the `FR-SAFE-4` warning banner: `true` when `path` isn't under `src/`,
+ * `include/`, `lib/`, `test/`, `data/`, or exactly `platformio.ini`.
+ */
+outsideExpectedDirs: boolean, };
+
+export type FileDiff = { path: string, before: string | null, after: string | null, };
+
 export type JsonValue = number | string | boolean | Array<JsonValue> | { [key in string]: JsonValue } | null;
 
 export type TurnId = string;
@@ -150,12 +170,6 @@ export type TurnRequest = { workspace: string, prompt: string,
  * no attachment UI yet.
  */
 attachments: Array<string>, policy: PermissionPolicy | null, model: string | null, };
-
-export type SnapshotId = string;
-
-export type ChangeStatus = "added" | "modified" | "deleted" | "renamed";
-
-export type FileChange = { path: string, status: ChangeStatus, additions: number, deletions: number, outsideExpectedDirs: boolean, };
 
 export type ChatEvent = { "type": "sessionReady", "data": { sessionId: SessionId, model: string, tools: Array<string>, capabilities: Array<string>, mcpErrors: Array<string>, pluginErrors: Array<string>, } } | { "type": "textDelta", "data": { turnId: TurnId, blockIndex: number, text: string, } } | { "type": "textBlock", "data": { turnId: TurnId, blockIndex: number, text: string, } } | { "type": "thinkingDelta", "data": { turnId: TurnId, blockIndex: number, text: string, } } | { "type": "toolCallStarted", "data": { turnId: TurnId, toolUseId: string, name: string, inputPreview: string, } } | { "type": "toolCallInputDelta", "data": { turnId: TurnId, toolUseId: string, partialJson: string, } } | { "type": "toolCallCompleted", "data": { turnId: TurnId, toolUseId: string, name: string, input: JsonValue, } } | { "type": "toolResult", "data": { turnId: TurnId, toolUseId: string, isError: boolean, summary: string, full: string | null, } } | { "type": "subagentMessage", "data": { turnId: TurnId, parentToolUseId: string, role: string, text: string, } } | { "type": "apiRetry", "data": { turnId: TurnId, attempt: number, maxRetries: number, retryDelayMs: number, error: string, errorStatus: number | null, } } | { "type": "permissionDenied", "data": { turnId: TurnId, tool: string, reason: string, } } | { "type": "compactBoundary", "data": { turnId: TurnId, } } | { "type": "result", "data": { turnId: TurnId, sessionId: SessionId, subtype: string, isError: boolean, numTurns: number, durationMs: number, durationApiMs: number, totalCostUsd: number | null, resultText: string | null, permissionDenials: Array<string>, } } | { "type": "changesComputed", "data": { turnId: TurnId, snapshot: SnapshotId, changes: Array<FileChange>, } } | { "type": "failed", "data": { turnId: TurnId, error: AppError, } };
 
@@ -183,7 +197,18 @@ argv: Array<string>,
  * typed `ChatEvent` so this record can round-trip through `Deserialize` without
  * widening `AppError`'s own derive surface just for archival storage.
  */
-events: Array<JsonValue>, assistantText: string, toolCalls: Array<TurnToolCall>, result: TurnResultMeta | null, };
+events: Array<JsonValue>, assistantText: string, toolCalls: Array<TurnToolCall>, result: TurnResultMeta | null, 
+/**
+ * The snapshot taken just before this turn ran (`core::snapshot`, `FR-SAFE-1`).
+ * `#[serde(default)]` so a record a pre-M4 build wrote still loads.
+ */
+snapshotBefore: string | null, 
+/**
+ * Computed once, right after the turn, from `snapshotBefore` vs the working tree at
+ * that moment (`FR-SAFE-2`) — an audit trail of what the turn did, independent of
+ * `changes_for_turn`'s live recomputation (`SPEC.md` §8 open question 14).
+ */
+changes: Array<FileChange>, };
 
 export type SessionIndexEntry = { id: string, startedAt: string, lastTurnAt: string, turnCount: number, totalCostUsd: number, title: string, };
 

@@ -156,3 +156,55 @@ async fn stop_mid_stream_terminates_the_process_and_reports_failure_not_a_result
     }
     assert!(!supervisor.running().iter().any(|p| p.id == proc_id), "the process must be gone after Stop");
 }
+
+/// `ROADMAP.md` M4's second acceptance criterion: "A turn run in Guarded policy against a
+/// fixture that attempts an arbitrary `Bash` call surfaces a `permissionDenied` card
+/// rather than failing silently" — end to end through the real spawn + NDJSON pipeline,
+/// not just the unit-level parser tests in `core::claude::ndjson`.
+#[tokio::test]
+async fn guarded_policy_permission_denial_surfaces_as_a_permission_denied_event() {
+    let dir = scratch_dir("permission-denied");
+    set_fixture(&dir, &repo_fixture("claude-turn-permission-denied.ndjson"), None);
+
+    let supervisor = ProcessSupervisor::new();
+    let claude = fake_claude();
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+    let turn_id = TurnId::new();
+
+    run_turn(
+        &supervisor,
+        RunTurnRequest {
+            claude: &claude,
+            workspace: &dir,
+            turn_id: turn_id.clone(),
+            prompt: "check the board's flash size over the network",
+            session: SessionRef::New(uuid::Uuid::new_v4().to_string()),
+            policy: PermissionPolicySetting::Guarded,
+            model: "sonnet",
+            permission_prompts_none_supported: true,
+        },
+        tx,
+    )
+    .await
+    .expect("spawn");
+
+    let mut events = Vec::new();
+    while let Some(ev) = rx.recv().await {
+        events.push(ev);
+    }
+
+    let denied = events.iter().find_map(|e| match e {
+        ChatEvent::PermissionDenied { tool, reason, .. } => Some((tool, reason)),
+        _ => None,
+    });
+    let (tool, reason) = denied.expect("expected a PermissionDenied event, turn failed silently instead");
+    assert_eq!(tool, "Bash");
+    assert!(!reason.is_empty());
+
+    // Not rendered as a bare process failure — the turn still reaches a normal Result.
+    assert!(!events.iter().any(|e| matches!(e, ChatEvent::Failed { .. })));
+    match events.last() {
+        Some(ChatEvent::Result { is_error, .. }) => assert!(is_error),
+        other => panic!("expected the turn to end with an errored Result, got {other:?}"),
+    }
+}

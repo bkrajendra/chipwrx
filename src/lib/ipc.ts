@@ -7,6 +7,8 @@ import type {
   ChatEvent,
   CreateProjectRequest,
   DoctorReport,
+  FileChange,
+  FileDiff,
   GlobalSettings,
   GlobalSettingsPatch,
   InstallEvent,
@@ -130,4 +132,28 @@ export function claudeNewSession(workspace: string): Promise<string> {
 
 export function claudeHistory(workspace: string, limit: number, before?: string): Promise<TurnRecord[]> {
   return invoke("claude_history", { workspace, limit, before: before ?? null });
+}
+
+export function changesForTurn(workspace: string, turnId: string): Promise<FileChange[]> {
+  return invoke("changes_for_turn", { workspace, turnId });
+}
+
+export function changesDiff(workspace: string, turnId: string, path: string): Promise<FileDiff> {
+  return invoke("changes_diff", { workspace, turnId, path });
+}
+
+export function changesRevertFile(workspace: string, turnId: string, path: string): Promise<void> {
+  return invoke("changes_revert_file", { workspace, turnId, path });
+}
+
+export function changesRevertTurn(workspace: string, turnId: string): Promise<void> {
+  return invoke("changes_revert_turn", { workspace, turnId });
+}
+
+export function changesResetToLastGoodBuild(workspace: string): Promise<string> {
+  return invoke("changes_reset_to_last_good_build", { workspace });
+}
+
+export function fileRead(workspace: string, path: string): Promise<string> {
+  return invoke("file_read", { workspace, path });
 }

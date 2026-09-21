@@ -541,3 +541,33 @@ Requirements are numbered `FR-<area>-<n>` and referenced from `ROADMAP.md`.
     flattens each block to a short text summary (e.g. `Tool: Name({...})` for a `tool_use`
     block) rather than emitting one `SubagentMessage` per block-with-structure. Revisit if
     subagent tool calls need their own cards.
+12. `ARCHITECTURE.md` §6's `AppError` enum has no variant for the snapshot/revert engine
+    (`core::snapshot`, `FR-SAFE-1..6`) failing — a `git2::Error` (corrupt shadow repo,
+    permission-denied write, etc.). M4 adds `SnapshotFailed { message }`, following the
+    same pattern as `ClaudeProcessFailed` (open question 8): a typed variant rather than
+    folding it into generic `Io`, since the UI likely wants to say "couldn't create a
+    safety snapshot" specifically.
+13. `FR-SAFE-6` ("Reset project to last known-good build") reads `.vibe/builds.json`'s
+    `lastGoodSnapshot` (`DATA-MODEL.md` §7), but `builds.json` is written by the build
+    pipeline, which doesn't exist until M5 — a forward dependency the milestone ordering
+    doesn't call out. M4 implements `changes_reset_to_last_good_build` fully (reads the
+    file, reverts to the recorded snapshot) but it's inert — returns `AppError::Io` with a
+    clear "no successful build recorded yet" message — until M5 starts writing that file.
+14. `FR-SAFE-2` says the Changes panel diffs "snapshot and working tree," not two
+    snapshots. M4 takes this literally: `changes_for_turn`/`changes_diff` always diff a
+    turn's `snapshotBefore` (`DATA-MODEL.md` §6) against the *current* on-disk working
+    tree, not a second "after" snapshot (which the data model doesn't have a field for
+    either). This is exact for the most recent turn; if further turns land afterward,
+    revisiting an older turn's Changes tab shows cumulative changes since that turn's
+    snapshot, not just that turn's own — a known staleness tradeoff, not a bug. Revisit if
+    per-turn attribution across multiple later turns turns out to matter.
+15. `FR-CHAT-4`'s "gated behind a typed confirmation that names the workspace path" implies
+    the Unrestricted toggle is reached from *within* a workspace, but permission policy is
+    a **global** setting (`DATA-MODEL.md` §3 `claude.permissionPolicy`) — there's no
+    concept of "the workspace" on a pure global-settings screen, and `IPC-CONTRACT.md` §9
+    has no `settings_set_project` command to make it a true per-project override either
+    (`ProjectClaudeSettings.permissionPolicy` exists in the data model but nothing writes
+    it). M4 mounts the policy selector in the Chat header specifically so the confirmation
+    has a concrete path to show/match, but it still edits the *global* setting — choosing
+    Unrestricted from one workspace makes it the default for every workspace until changed
+    back. Revisit once/if a real per-project override is added.

@@ -202,6 +202,12 @@ impl Default for AdvancedSettings {
 #[serde(rename_all = "camelCase")]
 pub struct GlobalSettings {
     pub schema_version: u32,
+    /// The app version that last wrote this file — compared at startup against the
+    /// running app's own version to drive the `apply_version_migration` reset. `None`
+    /// covers both a fresh install and a file written before this field existed; either
+    /// way, resetting is the safe default (`DATA-MODEL.md` §3).
+    #[serde(default)]
+    pub last_app_version: Option<String>,
     #[serde(default)]
     pub toolchain: ToolchainSettings,
     #[serde(default)]
@@ -226,6 +232,7 @@ impl Default for GlobalSettings {
     fn default() -> Self {
         Self {
             schema_version: CURRENT_SCHEMA_VERSION,
+            last_app_version: None,
             toolchain: ToolchainSettings::default(),
             claude: ClaudeSettings::default(),
             pipeline: PipelineSettings::default(),
@@ -304,9 +311,68 @@ pub fn save(config_dir: &Path, settings: &GlobalSettings) -> std::io::Result<()>
     Ok(())
 }
 
+/// `DATA-MODEL.md` §3: "`claude.permissionPolicy` is forced back to `guarded` and
+/// `advanced.allowUnrestrictedPolicy` to `false` whenever the app version changes"
+/// (`FR-CHAT-4`, `NFR-S3`) — Unrestricted is meant to be re-confirmed per install, not
+/// silently carried across an update. Returns `true` if anything changed (so the caller
+/// knows whether a re-save is needed), and always leaves `last_app_version` set to
+/// `current_version`.
+pub fn apply_version_migration(settings: &mut GlobalSettings, current_version: &str) -> bool {
+    if settings.last_app_version.as_deref() == Some(current_version) {
+        return false;
+    }
+    settings.last_app_version = Some(current_version.to_string());
+    settings.claude.permission_policy = PermissionPolicySetting::Guarded;
+    settings.advanced.allow_unrestricted_policy = false;
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn version_migration_resets_unrestricted_policy_on_a_version_change() {
+        let mut settings = GlobalSettings {
+            last_app_version: Some("0.1.0".into()),
+            ..Default::default()
+        };
+        settings.claude.permission_policy = PermissionPolicySetting::Unrestricted;
+        settings.advanced.allow_unrestricted_policy = true;
+
+        let changed = apply_version_migration(&mut settings, "0.2.0");
+        assert!(changed);
+        assert_eq!(settings.claude.permission_policy, PermissionPolicySetting::Guarded);
+        assert!(!settings.advanced.allow_unrestricted_policy);
+        assert_eq!(settings.last_app_version.as_deref(), Some("0.2.0"));
+    }
+
+    #[test]
+    fn version_migration_is_a_no_op_on_the_same_version() {
+        let mut settings = GlobalSettings {
+            last_app_version: Some("0.1.0".into()),
+            ..Default::default()
+        };
+        settings.claude.permission_policy = PermissionPolicySetting::Unrestricted;
+
+        let changed = apply_version_migration(&mut settings, "0.1.0");
+        assert!(!changed);
+        assert_eq!(settings.claude.permission_policy, PermissionPolicySetting::Unrestricted);
+    }
+
+    #[test]
+    fn version_migration_resets_on_first_run_with_no_recorded_version() {
+        // Covers both a fresh install and a settings.json written before this field
+        // existed — resetting is the safe default either way.
+        let mut settings = GlobalSettings::default();
+        settings.claude.permission_policy = PermissionPolicySetting::Unrestricted;
+        assert_eq!(settings.last_app_version, None);
+
+        let changed = apply_version_migration(&mut settings, "0.1.0");
+        assert!(changed);
+        assert_eq!(settings.claude.permission_policy, PermissionPolicySetting::Guarded);
+        assert_eq!(settings.last_app_version.as_deref(), Some("0.1.0"));
+    }
 
     #[test]
     fn missing_file_creates_defaults() {

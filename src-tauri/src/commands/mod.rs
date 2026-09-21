@@ -1,3 +1,4 @@
+pub mod changes;
 pub mod claude;
 pub mod doctor;
 pub mod project;

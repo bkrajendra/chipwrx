@@ -3,15 +3,11 @@
 //! at most the current line, never the history" — so it's written with `OpenOptions::
 //! append`, not the temp-file-then-rename pattern the rest of this app's stores use;
 //! `index.json` is small and rewritten each time, so it *does* use that pattern.
-//!
-//! M3 keeps `TurnRecord` to the fields the conversational loop itself produces.
-//! `snapshotBefore`/`changes` (`DATA-MODEL.md`'s full shape) are added once `core/snapshot`
-//! exists in M4 — same "settle the shape, populate it later" approach M2 used for
-//! `core::proc::events::{Defect, SizeUsage}`.
 
 use super::types::ChatEvent;
 use crate::core::project::workspace::vibe_dir;
 use crate::core::settings::PermissionPolicySetting;
+use crate::core::snapshot::types::FileChange;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -67,6 +63,15 @@ pub struct TurnRecord {
     pub assistant_text: String,
     pub tool_calls: Vec<TurnToolCall>,
     pub result: Option<TurnResultMeta>,
+    /// The snapshot taken just before this turn ran (`core::snapshot`, `FR-SAFE-1`).
+    /// `#[serde(default)]` so a record a pre-M4 build wrote still loads.
+    #[serde(default)]
+    pub snapshot_before: Option<String>,
+    /// Computed once, right after the turn, from `snapshotBefore` vs the working tree at
+    /// that moment (`FR-SAFE-2`) — an audit trail of what the turn did, independent of
+    /// `changes_for_turn`'s live recomputation (`SPEC.md` §8 open question 14).
+    #[serde(default)]
+    pub changes: Vec<FileChange>,
 }
 
 /// Builds `TurnRecord.events` from the events a turn actually emitted, filtering per
@@ -243,6 +248,8 @@ pub fn new_turn_record(
         assistant_text: String::new(),
         tool_calls: Vec::new(),
         result: None,
+        snapshot_before: None,
+        changes: Vec::new(),
     }
 }
 

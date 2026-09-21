@@ -23,7 +23,7 @@ function App() {
           </button>
         </div>
         <section className="flex-1 overflow-hidden">
-          <ChatScreen workspaceId={workspace.id} workspaceName={workspace.name} />
+          <ChatScreen workspaceId={workspace.id} workspaceName={workspace.name} workspacePath={workspace.path} />
         </section>
       </main>
     );

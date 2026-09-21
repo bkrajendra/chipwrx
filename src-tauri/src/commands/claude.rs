@@ -4,6 +4,7 @@
 use crate::commands::doctor::DoctorState;
 use crate::commands::project::{entry_path, ProjectRegistryState};
 use crate::commands::settings::SettingsState;
+use crate::commands::util::run_blocking;
 use crate::core::claude::argv::{build_turn_args, SessionRef};
 use crate::core::claude::ids::{SessionId, TurnId};
 use crate::core::claude::session::{self, TurnResultMeta, TurnToolCall};
@@ -13,6 +14,7 @@ use crate::core::proc::{ProcId, ProcessSupervisor};
 use crate::core::project::{trust, workspace};
 use crate::core::redact::redact;
 use crate::core::settings::PermissionPolicySetting;
+use crate::core::snapshot::engine as snapshot_engine;
 use crate::core::toolchain::probes;
 use crate::core::toolchain::resolve::{self, Tool};
 use crate::core::toolchain::types::ProbeResult;
@@ -115,6 +117,16 @@ pub async fn claude_send_turn(
     redacted_argv.extend(build_turn_args(&req.prompt, policy, permission_prompts_none, &model, &session));
     let redacted_argv: Vec<String> = redacted_argv.iter().map(|a| redact(a, false)).collect();
 
+    // `FR-SAFE-1`: a snapshot before each turn, so it can always be reverted regardless of
+    // what the turn does. Fails the turn outright rather than silently proceeding without
+    // a safety net — "This milestone is where the product becomes safe to use on real
+    // work" (`ROADMAP.md` M4).
+    let snapshot_before = {
+        let snap_dir = dir.clone();
+        let label = turn_id.0.clone();
+        run_blocking(move || snapshot_engine::snapshot(&snap_dir, &label)).await?
+    };
+
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
     let proc_id = turn::run_turn(
         &supervisor,
@@ -191,6 +203,29 @@ pub async fn claude_send_turn(
             let _ = on_event.send(ev);
         }
 
+        // `IPC-CONTRACT.md` §4: "Emitted after Result, once the snapshot diff has been
+        // computed" — also after `Failed` (an interrupted/failed turn can still have
+        // written partial edits worth showing).
+        let changes = {
+            let diff_dir = workspace_dir.clone();
+            let snap = snapshot_before.clone();
+            run_blocking(move || snapshot_engine::diff_against_working_tree(&diff_dir, &snap)).await
+        };
+        let changes = match changes {
+            Ok(changes) => {
+                let _ = on_event.send(ChatEvent::ChangesComputed {
+                    turn_id: turn_id_for_task.clone(),
+                    snapshot: snapshot_before.clone(),
+                    changes: changes.clone(),
+                });
+                changes
+            }
+            Err(e) => {
+                tracing::warn!("failed to compute post-turn diff: {e}");
+                Vec::new()
+            }
+        };
+
         let mut record = session::new_turn_record(
             turn_id_for_task.0.clone(),
             session_id_for_record,
@@ -205,6 +240,8 @@ pub async fn claude_send_turn(
         record.assistant_text = assistant_text;
         record.tool_calls = tool_calls;
         record.result = result_meta;
+        record.snapshot_before = Some(snapshot_before.0.clone());
+        record.changes = changes;
 
         if let Err(e) = session::append_turn(&workspace_dir, &record) {
             tracing::warn!("failed to persist turn record: {e}");

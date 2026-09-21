@@ -33,6 +33,7 @@ which = "8.0.6"
 zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 regex = "1.13.1"
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls"] }
+git2 = "0.19"
 tauri-plugin-dialog = "2.7.3"
 
 

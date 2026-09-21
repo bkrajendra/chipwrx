@@ -166,8 +166,9 @@ export function applyEvent(live: LiveTurn, event: ChatEvent): LiveTurn {
 
 /** Builds a `TurnRecord`-shaped entry from a finished `LiveTurn` so it can be prepended to
  * restored history without waiting on (and racing) the backend's own disk write. Fields
- * this app never reconstructs client-side (`model`, `policy`, `argv`, `events`) get inert
- * placeholders — nothing in the history renderer reads them. */
+ * this app never reconstructs client-side (`model`, `policy`, `argv`, `events`,
+ * `snapshotBefore`, `changes`) get inert placeholders — nothing in the history renderer
+ * reads them. */
 export function toTurnRecord(live: LiveTurn): TurnRecord {
   const assistantText = live.blocks
     .filter((b): b is Extract<Block, { kind: "text" }> => b.kind === "text")
@@ -195,6 +196,10 @@ export function toTurnRecord(live: LiveTurn): TurnRecord {
     policy: "guarded",
     argv: [],
     events: [],
+    // Inert here too — the "Changes" button always re-fetches fresh via `changesForTurn`
+    // rather than reading these off the (possibly synthetic, client-only) TurnRecord.
+    snapshotBefore: null,
+    changes: [],
     assistantText,
     toolCalls,
     result: resultBlock

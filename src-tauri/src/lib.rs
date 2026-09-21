@@ -64,6 +64,12 @@ pub fn run() {
             commands::claude::claude_stop_turn,
             commands::claude::claude_new_session,
             commands::claude::claude_history,
+            commands::changes::changes_for_turn,
+            commands::changes::changes_diff,
+            commands::changes::changes_revert_file,
+            commands::changes::changes_revert_turn,
+            commands::changes::changes_reset_to_last_good_build,
+            commands::changes::file_read,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

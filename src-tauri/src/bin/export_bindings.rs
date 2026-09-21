@@ -16,7 +16,7 @@ use vibe_hardware_lib::commands::doctor::ToolchainTool;
 use vibe_hardware_lib::commands::settings::GlobalSettingsPatch;
 use vibe_hardware_lib::core::claude::ids::{SessionId, TurnId};
 use vibe_hardware_lib::core::claude::session::{SessionIndex, SessionIndexEntry, TurnRecord, TurnResultMeta, TurnToolCall};
-use vibe_hardware_lib::core::claude::types::{ChangeStatus, ChatEvent, FileChange, PermissionPolicy, SnapshotId, TurnRequest};
+use vibe_hardware_lib::core::claude::types::{ChatEvent, PermissionPolicy, TurnRequest};
 use vibe_hardware_lib::core::pio::boards::{BoardBrief, BoardSource};
 use vibe_hardware_lib::core::pio::init::CreateProjectRequest;
 use vibe_hardware_lib::core::proc::events::{Defect, DefectSource, ProcEvent, Severity, SizeUsage};
@@ -30,6 +30,7 @@ use vibe_hardware_lib::core::settings::{
     MonitorSettings, NetworkSettings, PermissionPolicySetting, PipelinePolicySetting, PipelineSettings,
     ThemeSetting, ToolchainSettings,
 };
+use vibe_hardware_lib::core::snapshot::types::{ChangeStatus, FileChange, FileDiff, SnapshotId};
 use vibe_hardware_lib::core::toolchain::install::{InstallEvent, InstallPlan};
 use vibe_hardware_lib::core::toolchain::types::{DoctorReport, ProbeResult, Remediation, RemediationKind};
 use vibe_hardware_lib::error::{AppError, PermissionDenial};
@@ -105,15 +106,18 @@ fn main() {
     emit!(ProjectSettings);
     emit!(TrustScan);
 
+    // Snapshots and changes (IPC-CONTRACT.md §8)
+    emit!(SnapshotId);
+    emit!(ChangeStatus);
+    emit!(FileChange);
+    emit!(FileDiff);
+
     // Claude turns (IPC-CONTRACT.md §4)
     emit!(serde_json::Value); // -> "JsonValue", referenced by ChatEvent/TurnRecord fields
     emit!(TurnId);
     emit!(SessionId);
     emit!(PermissionPolicy);
     emit!(TurnRequest);
-    emit!(SnapshotId);
-    emit!(ChangeStatus);
-    emit!(FileChange);
     emit!(ChatEvent);
     emit!(TurnToolCall);
     emit!(TurnResultMeta);

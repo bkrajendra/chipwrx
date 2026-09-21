@@ -79,6 +79,13 @@ pub enum AppError {
         hooks: Vec<String>,
         mcp_servers: Vec<String>,
     },
+    /// See `SPEC.md` §8 open question 12: the safety-net snapshot/revert engine
+    /// (`core::snapshot`) has no dedicated variant in `ARCHITECTURE.md` §6's original
+    /// list. `message` is `git2::Error::message()` or an equivalent local diagnostic —
+    /// never surfaced with a git plumbing command that could resemble a shell string.
+    SnapshotFailed {
+        message: String,
+    },
     Io {
         message: String,
     },
@@ -106,6 +113,14 @@ impl From<serde_json::Error> for AppError {
     fn from(err: serde_json::Error) -> Self {
         AppError::Io {
             message: err.to_string(),
+        }
+    }
+}
+
+impl From<git2::Error> for AppError {
+    fn from(err: git2::Error) -> Self {
+        AppError::SnapshotFailed {
+            message: err.message().to_string(),
         }
     }
 }

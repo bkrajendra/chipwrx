@@ -19,8 +19,14 @@ pub fn config_dir(app: &AppHandle) -> Result<std::path::PathBuf, AppError> {
 
 pub fn load_at_startup(app: &AppHandle) -> Result<GlobalSettings, AppError> {
     let dir = config_dir(app)?;
-    let (settings, _outcome) = settings::load(&dir)?;
-    Ok(settings)
+    let (mut loaded, _outcome) = settings::load(&dir)?;
+
+    let current_version = app.package_info().version.to_string();
+    if settings::apply_version_migration(&mut loaded, &current_version) {
+        settings::save(&dir, &loaded)?;
+    }
+
+    Ok(loaded)
 }
 
 #[tauri::command]

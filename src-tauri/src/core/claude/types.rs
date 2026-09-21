@@ -1,10 +1,8 @@
-//! Claude turn IPC types. See `IPC-CONTRACT.md` §4 (and §8 for `SnapshotId`/`FileChange`,
-//! which `ChatEvent::ChangesComputed` references — defined here, not populated until
-//! `core/snapshot` exists in M4, exactly like `core::proc::events::{Defect, SizeUsage}`
-//! were settled in M2 ahead of `core/diag` in M5).
+//! Claude turn IPC types. See `IPC-CONTRACT.md` §4.
 
 use super::ids::{SessionId, TurnId};
 use crate::core::settings::PermissionPolicySetting;
+use crate::core::snapshot::types::{FileChange, SnapshotId};
 use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -50,34 +48,6 @@ pub struct TurnRequest {
     pub attachments: Vec<String>,
     pub policy: Option<PermissionPolicy>,
     pub model: Option<String>,
-}
-
-// ---------------------------------------------------------------------------------------
-// §8 — Snapshots and changes. Referenced by `ChatEvent::ChangesComputed` but not populated
-// until `core/snapshot` exists (M4). Settled now so every consumer compiles against the
-// same shape from the start.
-// ---------------------------------------------------------------------------------------
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
-pub struct SnapshotId(pub String);
-
-#[derive(Debug, Clone, Copy, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub enum ChangeStatus {
-    Added,
-    Modified,
-    Deleted,
-    Renamed,
-}
-
-#[derive(Debug, Clone, Serialize, TS)]
-#[serde(rename_all = "camelCase")]
-pub struct FileChange {
-    pub path: String,
-    pub status: ChangeStatus,
-    pub additions: u32,
-    pub deletions: u32,
-    pub outside_expected_dirs: bool,
 }
 
 // ---------------------------------------------------------------------------------------
@@ -195,8 +165,8 @@ pub enum ChatEvent {
         permission_denials: Vec<String>,
     },
 
-    /// Emitted after `Result`, once the snapshot diff has been computed. Not emitted until
-    /// `core/snapshot` exists (M4) — see the module doc comment.
+    /// Emitted after `Result`/`Failed`, once the pre-turn-vs-working-tree diff has been
+    /// computed (`core::snapshot`).
     ChangesComputed {
         turn_id: TurnId,
         snapshot: SnapshotId,

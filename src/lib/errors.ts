@@ -83,6 +83,10 @@ const registry: { [C in Code]: (err: Variant<C>) => ErrorRenderInfo } = {
     message: `This folder has ${err.hooks.length} hook(s) and ${err.mcpServers.length} MCP server(s) that will run with no prompt. Review before continuing.`,
     remediation: { label: "Review and trust" },
   }),
+  SNAPSHOT_FAILED: (err) => ({
+    title: "Couldn't create a safety snapshot",
+    message: err.message,
+  }),
   IO: (err) => ({
     title: "Unexpected error",
     message: err.message,
