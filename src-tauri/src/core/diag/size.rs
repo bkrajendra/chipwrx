@@ -97,4 +97,17 @@ mod tests {
         assert_eq!(usages[0].ram_used, 22116);
         assert_eq!(usages[0].flash_used, 274536);
     }
+
+    /// A real `pio run -t upload` against a physical ESP32-C6-DevKitM-1 — a different
+    /// chip family (RISC-V, not Xtensa) and an *empty* progress bar (`[          ]`, no
+    /// `=` characters at all), which the success fixture's `[=         ]` doesn't cover.
+    #[test]
+    fn real_captured_upload_fixture_parses_size_with_an_empty_progress_bar() {
+        let text = include_str!("../../../../tests/fixtures/pio-run-upload-success.txt");
+        let mut p = SizeParser::new();
+        let usages: Vec<_> = text.lines().filter_map(|l| p.feed_line(l)).collect();
+        assert_eq!(usages.len(), 1, "{usages:?}");
+        assert_eq!(usages[0].ram_used, 15024);
+        assert_eq!(usages[0].flash_used, 283162);
+    }
 }

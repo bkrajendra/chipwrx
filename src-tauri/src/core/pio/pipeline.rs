@@ -119,8 +119,8 @@ pub async fn spawn_pio_run(
 
 /// `CLI-CONTRACT.md` §5.1: "Terminal status lines to key the UI off... the `Building
 /// .pio/build/<env>/firmware.bin` / `Writing at 0x...` progress lines during upload."
-/// `Writing at 0x...` is esptool output during a real flash — unverified against a real
-/// capture in this environment (no hardware), included per CLI-CONTRACT's own text.
+/// `Writing at 0x...` is esptool output during a real flash — verified against a real
+/// ESP32-C6-DevKitM-1 upload (`tests/fixtures/pio-run-upload-success.txt`).
 const STAGE_PREFIXES: &[&str] = &[
     "Compiling ",
     "Linking ",
@@ -270,6 +270,18 @@ mod tests {
     fn ignores_unrelated_lines() {
         assert_eq!(detect_stage("PLATFORM: Espressif 32 (55.3.311)"), None);
         assert_eq!(detect_stage(""), None);
+    }
+
+    /// From a real `pio run -t upload` against a physical ESP32-C6-DevKitM-1 — confirms
+    /// `detect_stage`'s `"Writing at "` prefix against genuine esptool output, not a guess.
+    #[test]
+    fn real_captured_upload_produces_writing_at_stages() {
+        let text = include_str!("../../../../tests/fixtures/pio-run-upload-success.txt");
+        let stages: Vec<_> = text.lines().filter_map(detect_stage).collect();
+        assert!(stages.iter().any(|s| s.starts_with("Writing at 0x00000000")));
+        assert!(stages.iter().any(|s| s.starts_with("Writing at 0x00010000")));
+        assert!(stages.iter().any(|s| s.starts_with("Checking size")));
+        assert!(stages.iter().any(|s| s.starts_with("Retrieving maximum program size")));
     }
 
     #[test]
