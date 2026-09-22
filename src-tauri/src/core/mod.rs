@@ -1,4 +1,6 @@
 pub mod claude;
+pub mod device;
+pub mod diag;
 pub mod pio;
 pub mod proc;
 pub mod project;

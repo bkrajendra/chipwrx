@@ -17,8 +17,11 @@ use vibe_hardware_lib::commands::settings::GlobalSettingsPatch;
 use vibe_hardware_lib::core::claude::ids::{SessionId, TurnId};
 use vibe_hardware_lib::core::claude::session::{SessionIndex, SessionIndexEntry, TurnRecord, TurnResultMeta, TurnToolCall};
 use vibe_hardware_lib::core::claude::types::{ChatEvent, PermissionPolicy, TurnRequest};
+use vibe_hardware_lib::core::device::list::SerialDevice;
 use vibe_hardware_lib::core::pio::boards::{BoardBrief, BoardSource};
+use vibe_hardware_lib::core::pio::build_history::{BuildKind, BuildRecord, BuildSize, DefectCount};
 use vibe_hardware_lib::core::pio::init::CreateProjectRequest;
+use vibe_hardware_lib::core::pio::pipeline::{PipelineState, PipelineStep};
 use vibe_hardware_lib::core::proc::events::{Defect, DefectSource, ProcEvent, Severity, SizeUsage};
 use vibe_hardware_lib::core::proc::{LogLine, ProcId, ProcKind, ProcSummary, StdStream};
 use vibe_hardware_lib::core::project::types::{
@@ -124,6 +127,17 @@ fn main() {
     emit!(TurnRecord);
     emit!(SessionIndexEntry);
     emit!(SessionIndex);
+
+    // Build/upload pipeline (IPC-CONTRACT.md §5)
+    emit!(PipelineStep);
+    emit!(PipelineState);
+    emit!(BuildKind);
+    emit!(DefectCount);
+    emit!(BuildSize);
+    emit!(BuildRecord);
+
+    // Devices (IPC-CONTRACT.md §6, minimal pre-PortBroker slice)
+    emit!(SerialDevice);
 
     // Resolved from `CARGO_MANIFEST_DIR` (always `src-tauri/`), not the process's current
     // directory — `npm run gen:bindings` invokes this via `cargo run --manifest-path`,

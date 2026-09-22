@@ -13,7 +13,7 @@ export type ProcSummary = { id: ProcId, label: string, kind: ProcKind, startedAt
 
 export type PermissionDenial = { tool: string, reason: string, };
 
-export type AppError = { "code": "TOOL_MISSING", tool: string, installAction: boolean, } | { "code": "TOOL_TOO_OLD", tool: string, found: string, minimum: string, } | { "code": "CLAUDE_UNAUTHENTICATED" } | { "code": "CLAUDE_PERMISSION_DENIED", denials: Array<PermissionDenial>, } | { "code": "CLAUDE_INTERRUPTED", sessionId: string, } | { "code": "NETWORK_UNAVAILABLE", host: string, } | { "code": "PIO_COMMAND_FAILED", argv: Array<string>, exitCode: number, tail: string, } | { "code": "CLAUDE_PROCESS_FAILED", exitCode: number, tail: string, } | { "code": "BUILD_FAILED", defects: number, } | { "code": "PORT_BUSY", port: string, heldBy: string, } | { "code": "PORT_DISAPPEARED", port: string, } | { "code": "NOT_A_PIO_PROJECT", path: string, } | { "code": "INI_PARSE", path: string, line: number | null, message: string, } | { "code": "INI_CHANGED_ON_DISK", path: string, } | { "code": "WORKSPACE_UNTRUSTED", hooks: Array<string>, mcpServers: Array<string>, } | { "code": "SNAPSHOT_FAILED", message: string, } | { "code": "IO", message: string, };
+export type AppError = { "code": "TOOL_MISSING", tool: string, installAction: boolean, } | { "code": "TOOL_TOO_OLD", tool: string, found: string, minimum: string, } | { "code": "CLAUDE_UNAUTHENTICATED" } | { "code": "CLAUDE_PERMISSION_DENIED", denials: Array<PermissionDenial>, } | { "code": "CLAUDE_INTERRUPTED", sessionId: string, } | { "code": "NETWORK_UNAVAILABLE", host: string, } | { "code": "PIO_COMMAND_FAILED", argv: Array<string>, exitCode: number, tail: string, } | { "code": "CLAUDE_PROCESS_FAILED", exitCode: number, tail: string, } | { "code": "BUILD_FAILED", defects: number, } | { "code": "PORT_BUSY", port: string, heldBy: string, } | { "code": "PORT_DISAPPEARED", port: string, } | { "code": "NOT_A_PIO_PROJECT", path: string, } | { "code": "INI_PARSE", path: string, line: number | null, message: string, } | { "code": "INI_CHANGED_ON_DISK", path: string, } | { "code": "WORKSPACE_UNTRUSTED", hooks: Array<string>, mcpServers: Array<string>, } | { "code": "SNAPSHOT_FAILED", message: string, } | { "code": "UPLOAD_BLOCKED", reason: string, } | { "code": "IO", message: string, };
 
 export type ProbeResult = { "status": "ok", version: string, path: string | null, detail: string | null, } | { "status": "missing", installAvailable: boolean, } | { "status": "degraded", reason: string, remediation: Remediation | null, } | { "status": "error", detail: string, } | { "status": "probing" };
 
@@ -213,4 +213,32 @@ changes: Array<FileChange>, };
 export type SessionIndexEntry = { id: string, startedAt: string, lastTurnAt: string, turnCount: number, totalCostUsd: number, title: string, };
 
 export type SessionIndex = { schemaVersion: number, current: string | null, sessions: Array<SessionIndexEntry>, };
+
+export type PipelineStep = "idle" | "building" | "buildOk" | "uploading" | "failed" | "monitoring";
+
+export type PipelineState = { step: PipelineStep, 
+/**
+ * RFC3339 — when `step` was entered.
+ */
+since: string, env: string | null, procId: ProcId | null, };
+
+export type BuildKind = "build" | "upload" | "test" | "check";
+
+export type DefectCount = { error: number, warning: number, };
+
+export type BuildSize = { ramUsed: number, ramTotal: number, flashUsed: number, flashTotal: number, };
+
+export type BuildRecord = { id: string, 
+/**
+ * RFC3339.
+ */
+at: string, env: string, kind: BuildKind, success: boolean, durationMs: number, snapshot: string | null, size: BuildSize | null, defectCount: DefectCount, };
+
+export type SerialDevice = { port: string, description: string, hwid: string, vid: string | null, pid: string | null, serial: string | null, 
+/**
+ * `"CH340" | "CP210x" | "FTDI"` from a well-known USB-serial bridge VID; `None` for
+ * anything else (including Espressif's own native-USB VIDs — not confidently mapped
+ * to a single label, so left unset rather than guessed).
+ */
+knownBridge: string | null, };
 

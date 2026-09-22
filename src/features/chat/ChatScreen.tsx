@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { AppError, TurnRecord } from "../../lib/bindings";
 import { ChangesPanel } from "../changes/ChangesPanel";
 import { renderAppError } from "../../lib/errors";
+import { PipelinePanel } from "../pipeline/PipelinePanel";
+import { PipelineStrip } from "../pipeline/PipelineStrip";
+import { usePipeline } from "../pipeline/usePipeline";
 import { PermissionPolicyControl } from "../settings-global/PermissionPolicyControl";
 import type { Block, LiveTurn } from "./blocks";
 import { PromptDeck } from "./PromptDeck";
@@ -165,10 +168,13 @@ function LiveTurnCard({ live, onOpenChanges }: { live: LiveTurn; onOpenChanges: 
   );
 }
 
+type SidePanel = { kind: "changes"; turnId: string } | { kind: "pipeline" };
+
 export function ChatScreen({ workspaceId, workspaceName, workspacePath }: { workspaceId: string; workspaceName: string; workspacePath: string }) {
   const { history, live, loadingHistory, error, send, stop, newSession } = useChat(workspaceId);
+  const pipeline = usePipeline(workspaceId);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const [viewingChangesFor, setViewingChangesFor] = useState<string | null>(null);
+  const [sidePanel, setSidePanel] = useState<SidePanel | null>(null);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
@@ -182,6 +188,7 @@ export function ChatScreen({ workspaceId, workspaceName, workspacePath }: { work
         <span className="text-sm font-medium">{workspaceName}</span>
         <div className="flex items-center gap-2">
           <PermissionPolicyControl workspacePath={workspacePath} />
+          <PipelineStrip state={pipeline.state} onStop={pipeline.stop} onOpen={() => setSidePanel({ kind: "pipeline" })} />
           <button
             type="button"
             onClick={() => void newSession()}
@@ -202,9 +209,9 @@ export function ChatScreen({ workspaceId, workspaceName, workspacePath }: { work
                 <p className="text-sm text-neutral-500 dark:text-neutral-400">Say what you'd like to build.</p>
               )}
               {history.map((t) => (
-                <TurnHistoryCard key={t.turnId} turn={t} onOpenChanges={setViewingChangesFor} />
+                <TurnHistoryCard key={t.turnId} turn={t} onOpenChanges={(turnId) => setSidePanel({ kind: "changes", turnId })} />
               ))}
-              {live && <LiveTurnCard live={live} onOpenChanges={setViewingChangesFor} />}
+              {live && <LiveTurnCard live={live} onOpenChanges={(turnId) => setSidePanel({ kind: "changes", turnId })} />}
               <div ref={bottomRef} />
             </div>
           </div>
@@ -216,9 +223,22 @@ export function ChatScreen({ workspaceId, workspaceName, workspacePath }: { work
           </div>
         </div>
 
-        {viewingChangesFor && (
+        {sidePanel?.kind === "changes" && (
           <div className="w-[440px] shrink-0 border-l border-neutral-200 dark:border-neutral-800">
-            <ChangesPanel workspaceId={workspaceId} turnId={viewingChangesFor} onClose={() => setViewingChangesFor(null)} />
+            <ChangesPanel workspaceId={workspaceId} turnId={sidePanel.turnId} onClose={() => setSidePanel(null)} />
+          </div>
+        )}
+        {sidePanel?.kind === "pipeline" && (
+          <div className="w-[520px] shrink-0 border-l border-neutral-200 dark:border-neutral-800">
+            <PipelinePanel
+              workspaceId={workspaceId}
+              pipeline={pipeline}
+              onClose={() => setSidePanel(null)}
+              onAskClaudeToFix={(prompt) => {
+                setSidePanel(null);
+                void send(prompt);
+              }}
+            />
           </div>
         )}
       </div>

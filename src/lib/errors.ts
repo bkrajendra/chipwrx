@@ -87,6 +87,10 @@ const registry: { [C in Code]: (err: Variant<C>) => ErrorRenderInfo } = {
     title: "Couldn't create a safety snapshot",
     message: err.message,
   }),
+  UPLOAD_BLOCKED: (err) => ({
+    title: "Upload blocked",
+    message: err.reason,
+  }),
   IO: (err) => ({
     title: "Unexpected error",
     message: err.message,

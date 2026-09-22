@@ -571,3 +571,46 @@ Requirements are numbered `FR-<area>-<n>` and referenced from `ROADMAP.md`.
     has a concrete path to show/match, but it still edits the *global* setting — choosing
     Unrestricted from one workspace makes it the default for every workspace until changed
     back. Revisit once/if a real per-project override is added.
+16. `CLI-CONTRACT.md` §5.1's linker diagnostic form ("the linker's `undefined reference`
+    form... plus the preceding `file:line:` line") is unverified against a real captured
+    link failure — `tests/fixtures/pio-run-fail.txt` only has compiler (syntax) errors.
+    M5's parser handles the shape a real GNU-ld undefined-reference failure is known to
+    take (`file:line:` and `undefined reference to '...'` combined on one line) and, as a
+    fallback, a bare `file:line:` line followed by an `undefined reference` with no prefix
+    of its own. Revisit once a real linker failure is captured.
+17. `FR-BUILD-2`'s upload needs "the port lease (§5.7)" — `PortBroker` (RAII leases, monitor
+    preemption, hot-plug tracking) — but that's M6's `core/device` module, which doesn't
+    exist yet. M5 adds a minimal, stateless `device_list_ports()` (wrapping
+    `pio device list --serial --json-output`, already documented in `CLI-CONTRACT.md` §3.2)
+    so Upload has *something* to pick a port from, and lets `--upload-port` be omitted
+    entirely (PlatformIO auto-detects when it's absent). No leasing, no preemption, no
+    re-enumeration-after-flash retry — those stay M6's job. Revisit once `PortBroker`
+    exists; this should probably be absorbed into it rather than living standalone.
+18. `ARCHITECTURE.md` §4.1's pipeline state machine spans both the chat turn lifecycle
+    (`Idle`/`Thinking`/`Writing`) and the build lifecycle (`Building`/`BuildOk`/
+    `Uploading`/`Monitoring`). M5 implements and emits `pipeline://state` for only the
+    build half (`Idle` here meaning "no build/upload running," not literally the chat
+    state) — wiring `Thinking`/`Writing` transitions from `claude_send_turn`'s own event
+    stream is deferred. The chat UI already shows its own live/running state inline
+    (`M3`), so this doesn't block FR-UI-4's build-facing pipeline strip; revisit if a
+    single unified strip covering both halves turns out to be wanted.
+19. `ARCHITECTURE.md` §6's `AppError` has nothing for "Upload was attempted but Safe
+    policy's `BuildOk` isn't current" (`FR-BUILD-3`) — distinct from `BuildFailed`, which
+    is about a build that actually ran and produced defects. M5 adds
+    `UploadBlocked { reason }` so the UI can render a specific disabled-button tooltip
+    rather than a generic error.
+20. `ARCHITECTURE.md` §4.1's staleness rule ("Safe policy... any file change invalidates
+    [`BuildOk`]") doesn't specify a detection mechanism, and this product has no code
+    editor to hook edit events from (`CLAUDE.md`) — file changes come from Claude turns or
+    an external editor either way. M5 polls: the max mtime under `src/`, `include/`,
+    `lib/`, `platformio.ini` is recorded when `BuildOk` is entered and re-checked on demand
+    (serving `pipeline_state`, before an Upload) rather than via a filesystem watcher.
+    Cheap for a typical embedded source tree; revisit if a `notify`-based watcher turns out
+    to be needed (e.g. for a live "stale" badge without the user taking an action first).
+21. `IPC-CONTRACT.md` §6 has `device_list() -> Vec<SerialDevice>` but nothing to persist
+    which port the user picked, and `pipeline_upload` needs one to pass as
+    `--upload-port` (or omit, letting PlatformIO auto-detect — open question 17). M5 adds
+    `device_set_preferred_port(workspace, port)`, writing
+    `ProjectSettings.device.preferredPort` (already in `DATA-MODEL.md` §4, unused until
+    now). Revisit once `PortBroker` exists in case device selection should route through
+    it instead of a bare settings write.

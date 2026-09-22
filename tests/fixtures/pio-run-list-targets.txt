@@ -1,0 +1,14 @@
+Environment    Group     Name           Title                                        Description
+-------------  --------  -------------  -------------------------------------------  ---------------------------------------------------------------------
+esp32dev       Custom    coredump       Coredump Analysis                            Analyze coredumps using esp-coredump (supports CLI args after --)
+esp32dev       Custom    coredump-only  Coredump Analysis (No Build)                 Analyze coredumps without building first
+esp32dev       Custom    metrics        Firmware Size Metrics                        Analyze firmware size using esp-idf-size (supports CLI args after --)
+esp32dev       Custom    metrics-only   Firmware Size Metrics (No Build)             Analyze firmware size without building first
+esp32dev       Platform  buildfs        Build Filesystem Image
+esp32dev       Platform  download_fs    Download and extract filesystem from device
+esp32dev       Platform  erase          Erase Flash
+esp32dev       Platform  erase_upload   Erase Flash and Upload
+esp32dev       Platform  size           Program Size                                 Calculate program size
+esp32dev       Platform  upload         Upload
+esp32dev       Platform  uploadfs       Upload Filesystem Image
+esp32dev       Platform  uploadfsota    Upload Filesystem Image OTA

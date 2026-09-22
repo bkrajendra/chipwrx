@@ -86,6 +86,11 @@ pub enum AppError {
     SnapshotFailed {
         message: String,
     },
+    /// `FR-BUILD-3` Safe policy: Upload attempted without (or after invalidating) a
+    /// successful current-state Build. See `SPEC.md` §8 open question 19.
+    UploadBlocked {
+        reason: String,
+    },
     Io {
         message: String,
     },

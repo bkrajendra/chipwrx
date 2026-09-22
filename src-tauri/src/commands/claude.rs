@@ -148,6 +148,7 @@ pub async fn claude_send_turn(
 
     let app_for_task = app.clone();
     let workspace_dir = dir.clone();
+    let workspace_id_for_task = req.workspace.clone();
     let turn_id_for_task = turn_id.clone();
     let prompt_for_record = req.prompt.clone();
     let model_for_record = model.clone();
@@ -225,6 +226,12 @@ pub async fn claude_send_turn(
                 Vec::new()
             }
         };
+
+        // `FR-BUILD-3` Watch policy: "after a turn's changes land, Build runs
+        // automatically." A no-op under any other policy, or if nothing changed.
+        if !changes.is_empty() {
+            crate::commands::pipeline::trigger_watch_build_if_applicable(&app_for_task, &workspace_id_for_task).await;
+        }
 
         let mut record = session::new_turn_record(
             turn_id_for_task.0.clone(),

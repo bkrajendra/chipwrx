@@ -12,10 +12,12 @@ import type {
   GlobalSettings,
   GlobalSettingsPatch,
   InstallEvent,
+  PipelineState,
   ProbeResult,
   ProcEvent,
   ProjectEntry,
   RemediationKind,
+  SerialDevice,
   ToolchainTool,
   TrustScan,
   TurnRecord,
@@ -156,4 +158,42 @@ export function changesResetToLastGoodBuild(workspace: string): Promise<string> 
 
 export function fileRead(workspace: string, path: string): Promise<string> {
   return invoke("file_read", { workspace, path });
+}
+
+export function pipelineBuild(workspace: string, onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pipeline_build", { workspace, onEvent: channel });
+}
+
+export function pipelineUpload(workspace: string, onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pipeline_upload", { workspace, onEvent: channel });
+}
+
+export function pipelineRunTarget(workspace: string, target: string, onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pipeline_run_target", { workspace, target, onEvent: channel });
+}
+
+export function pipelineStop(procId: string): Promise<void> {
+  return invoke("pipeline_stop", { procId });
+}
+
+export function pipelineTargets(workspace: string, refresh: boolean): Promise<string[]> {
+  return invoke("pipeline_targets", { workspace, refresh });
+}
+
+export function pipelineState(workspace: string): Promise<PipelineState> {
+  return invoke("pipeline_state", { workspace });
+}
+
+export function deviceList(): Promise<SerialDevice[]> {
+  return invoke("device_list");
+}
+
+export function deviceSetPreferredPort(workspace: string, port: string | null): Promise<void> {
+  return invoke("device_set_preferred_port", { workspace, port });
 }

@@ -4,8 +4,10 @@ pub mod error;
 
 use crate::commands::claude::ActiveTurnsState;
 use crate::commands::doctor::{DoctorState, HttpClientState};
+use crate::commands::pipeline::{ActivePipelineProcs, PipelineRegistryState};
 use crate::commands::project::ProjectRegistryState;
 use crate::commands::settings::SettingsState;
+use crate::core::pio::pipeline::PipelineRegistry;
 use crate::core::proc::ProcessSupervisor;
 use crate::core::project::types::ProjectRegistry;
 use crate::core::settings::GlobalSettings;
@@ -24,6 +26,8 @@ pub fn run() {
         .manage(DoctorState(Mutex::new(DoctorCache::new())))
         .manage(HttpClientState(reqwest::Client::new()))
         .manage(ActiveTurnsState(Mutex::new(HashMap::new())))
+        .manage(PipelineRegistryState(Mutex::new(PipelineRegistry::new())))
+        .manage(ActivePipelineProcs(Mutex::new(HashMap::new())))
         .setup(|app| {
             let settings = commands::settings::load_at_startup(app.handle()).unwrap_or_else(|e| {
                 tracing::warn!("failed to load settings.json, using defaults: {e}");
@@ -70,6 +74,14 @@ pub fn run() {
             commands::changes::changes_revert_turn,
             commands::changes::changes_reset_to_last_good_build,
             commands::changes::file_read,
+            commands::pipeline::pipeline_build,
+            commands::pipeline::pipeline_upload,
+            commands::pipeline::pipeline_run_target,
+            commands::pipeline::pipeline_stop,
+            commands::pipeline::pipeline_targets,
+            commands::pipeline::pipeline_state,
+            commands::device::device_list,
+            commands::device::device_set_preferred_port,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
