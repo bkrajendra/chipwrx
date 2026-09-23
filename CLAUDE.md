@@ -163,3 +163,13 @@ Command handlers stay thin. If a handler is more than ~20 lines, the logic belon
     `tool-esptoolpy` versions. Probe both; strip the `Using …package` prefix line.
 12. **`claude -p` runs a workspace's hooks and MCP servers with no prompt.** Trust-scan
     any folder the app did not create before the first turn.
+13. **`pio`'s own stdout encoding depends on the host locale when piped, not the console
+    codepage.** On a non-UTF-8-locale Windows machine, PlatformIO's Python process crashes
+    mid-upload with `UnicodeEncodeError` trying to echo esptool's Unicode progress-bar
+    characters (`░█`) — even with the terminal's own codepage already set to UTF-8 (`chcp
+    65001`), because a redirected (piped) stdout uses `locale.getpreferredencoding()`, a
+    different Windows setting than the console codepage. `ProcessSupervisor::build_command`
+    sets `PYTHONIOENCODING=utf-8` and `PYTHONUTF8=1` on every spawn (harmless for non-Python
+    programs) so this can't happen regardless of the host machine's locale or how the app
+    itself was launched. Verified against a real ESP32-C6-DevKitM-1 upload: reproduced the
+    crash with the env vars unset, confirmed a clean `[SUCCESS]` with them set.

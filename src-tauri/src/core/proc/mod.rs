@@ -272,6 +272,15 @@ impl ProcessSupervisor {
         let mut cmd = Command::new(&spec.program);
         cmd.args(&spec.args);
         cmd.current_dir(&spec.cwd);
+        // PlatformIO (and any other Python-based tool) picks its stdout text encoding from
+        // the host locale when its stdout isn't a real console — on a non-UTF-8-locale
+        // Windows machine that's the ANSI codepage (e.g. cp1252), which can't encode
+        // esptool's own Unicode progress-bar characters (░█) and crashes the whole `pio`
+        // process mid-upload with `UnicodeEncodeError`. Forcing UTF-8 here fixes it for
+        // every spawn, not just `pio` — harmless for non-Python programs, which simply
+        // ignore an env var they don't recognize.
+        cmd.env("PYTHONIOENCODING", "utf-8");
+        cmd.env("PYTHONUTF8", "1");
         cmd.envs(spec.env.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         cmd.kill_on_drop(false); // we own lifecycle via the process table, not tokio's Drop.
 
