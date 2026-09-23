@@ -115,12 +115,12 @@ export function TemplatesTab({
       )}
 
       <div className="px-4 py-2">
-        {templates.length === 0 && <p className="text-xs text-neutral-400">No saved templates yet.</p>}
+        {templates.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No saved templates yet.</p>}
         {templates.map((t) => (
           <div key={t.name} className="flex items-center justify-between gap-2 border-b border-neutral-100 py-2 text-xs last:border-0 dark:border-neutral-900">
             <div>
               <p className="font-medium">{t.name}</p>
-              <p className="text-neutral-400">{new Date(t.createdAt).toLocaleString()}</p>
+              <p className="text-neutral-500 dark:text-neutral-400">{new Date(t.createdAt).toLocaleString()}</p>
             </div>
             <button
               type="button"

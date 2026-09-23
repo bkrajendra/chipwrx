@@ -61,7 +61,7 @@ export function PipelineStrip({
       className="flex items-center gap-2 rounded border border-neutral-300 px-2.5 py-1 text-xs dark:border-neutral-700"
     >
       <span className={STEP_COLOR[state.step]}>{STEP_LABEL[state.step]}</span>
-      {active && <span className="text-neutral-400">{elapsed}s</span>}
+      {active && <span className="text-neutral-500 dark:text-neutral-400">{elapsed}s</span>}
       {active && (
         <span
           role="button"

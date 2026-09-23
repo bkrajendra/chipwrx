@@ -77,9 +77,15 @@ export type GlobalSettings = { schemaVersion: number,
  * covers both a fresh install and a file written before this field existed; either
  * way, resetting is the safe default (`DATA-MODEL.md` §3).
  */
-lastAppVersion: string | null, toolchain: ToolchainSettings, claude: ClaudeSettings, pipeline: PipelineSettings, monitor: MonitorSettings, logs: LogSettings, editor: EditorSettings, appearance: AppearanceSettings, network: NetworkSettings, advanced: AdvancedSettings, };
+lastAppVersion: string | null, toolchain: ToolchainSettings, claude: ClaudeSettings, pipeline: PipelineSettings, monitor: MonitorSettings, logs: LogSettings, editor: EditorSettings, appearance: AppearanceSettings, network: NetworkSettings, advanced: AdvancedSettings, 
+/**
+ * `FR-SETUP-8`: "Completion state is per-machine, in `settings.json`, not
+ * per-project" — the 4-step first-run onboarding is skippable and re-enterable from
+ * Doctor, but only shows automatically once.
+ */
+onboardingCompleted: boolean, };
 
-export type GlobalSettingsPatch = { toolchain: ToolchainSettings | null, claude: ClaudeSettings | null, pipeline: PipelineSettings | null, monitor: MonitorSettings | null, logs: LogSettings | null, editor: EditorSettings | null, appearance: AppearanceSettings | null, network: NetworkSettings | null, advanced: AdvancedSettings | null, };
+export type GlobalSettingsPatch = { toolchain: ToolchainSettings | null, claude: ClaudeSettings | null, pipeline: PipelineSettings | null, monitor: MonitorSettings | null, logs: LogSettings | null, editor: EditorSettings | null, appearance: AppearanceSettings | null, network: NetworkSettings | null, advanced: AdvancedSettings | null, onboardingCompleted: boolean | null, };
 
 export type Severity = "error" | "warning" | "note";
 

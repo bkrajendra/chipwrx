@@ -148,6 +148,10 @@ export function claudeHistory(workspace: string, limit: number, before?: string)
   return invoke("claude_history", { workspace, limit, before: before ?? null });
 }
 
+export function attachmentAdd(workspace: string, sourcePath: string): Promise<string> {
+  return invoke("attachment_add", { workspace, sourcePath });
+}
+
 export function changesForTurn(workspace: string, turnId: string): Promise<FileChange[]> {
   return invoke("changes_for_turn", { workspace, turnId });
 }

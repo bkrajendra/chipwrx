@@ -226,6 +226,11 @@ pub struct GlobalSettings {
     pub network: NetworkSettings,
     #[serde(default)]
     pub advanced: AdvancedSettings,
+    /// `FR-SETUP-8`: "Completion state is per-machine, in `settings.json`, not
+    /// per-project" — the 4-step first-run onboarding is skippable and re-enterable from
+    /// Doctor, but only shows automatically once.
+    #[serde(default)]
+    pub onboarding_completed: bool,
 }
 
 impl Default for GlobalSettings {
@@ -242,6 +247,7 @@ impl Default for GlobalSettings {
             appearance: AppearanceSettings::default(),
             network: NetworkSettings::default(),
             advanced: AdvancedSettings::default(),
+            onboarding_completed: false,
         }
     }
 }

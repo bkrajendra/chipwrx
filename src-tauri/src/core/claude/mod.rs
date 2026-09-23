@@ -2,6 +2,7 @@
 //! `core/claude`, `ROADMAP.md` M3).
 
 pub mod argv;
+pub mod attachments;
 pub mod ids;
 pub mod ndjson;
 pub mod session;

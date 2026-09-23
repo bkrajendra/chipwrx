@@ -17,9 +17,10 @@ export interface LogLineView {
   text: string;
 }
 
-/** Caps in-memory log growth for a single run — `NFR-P3`-adjacent; the real virtualized,
- * persistently-capped Logs pane is M8's job. */
-const MAX_BUFFERED_LINES = 5000;
+/** `NFR-P3`: "the log pane virtualises and caps at a configurable 50 000 lines." Falls back
+ * to `GlobalSettings.logs.maxLines`'s own default (see `core::settings::LogSettings`) until
+ * the caller has that setting loaded. */
+const DEFAULT_MAX_LOG_LINES = 50_000;
 
 interface PipelineStatePayload {
   workspace: string;
@@ -27,7 +28,7 @@ interface PipelineStatePayload {
   since: string;
 }
 
-export function usePipeline(workspaceId: string) {
+export function usePipeline(workspaceId: string, maxLines: number = DEFAULT_MAX_LOG_LINES) {
   const [state, setState] = useState<PipelineState | null>(null);
   const [lines, setLines] = useState<LogLineView[]>([]);
   const [defects, setDefects] = useState<Defect[]>([]);
@@ -62,7 +63,7 @@ export function usePipeline(workspaceId: string) {
       case "lines":
         setLines((prev) => {
           const next = [...prev, ...ev.data.lines.map((l) => ({ stream: l.stream, text: l.text }))];
-          return next.length > MAX_BUFFERED_LINES ? next.slice(next.length - MAX_BUFFERED_LINES) : next;
+          return next.length > maxLines ? next.slice(next.length - maxLines) : next;
         });
         break;
       case "defect":
@@ -80,7 +81,7 @@ export function usePipeline(workspaceId: string) {
       default:
         break;
     }
-  }, []);
+  }, [maxLines]);
 
   const run = useCallback(
     async (action: () => Promise<string>) => {

@@ -1,0 +1,75 @@
+// `NFR-A3`: "All user-facing strings in one resource module from day one, even though v1
+// ships English only." Covers the M8 shell chrome (sidebar, canvas tabs, command palette,
+// shortcuts, onboarding) — the strings every screen shares or that a translator would hit
+// first. Feature-internal copy already shipped in earlier milestones (chat block text,
+// panel-specific labels) stays inline for now rather than being retrofitted wholesale;
+// `SPEC.md` §8 tracks this as a known partial migration, not a silent gap.
+
+export const strings = {
+  shell: {
+    back: "Projects",
+    newSession: "New session",
+    collapseSidebar: "Collapse sidebar",
+    expandSidebar: "Expand sidebar",
+    openInNewWindow: "Open in new window",
+  },
+  tabs: {
+    chat: "Chat",
+    logs: "Logs",
+    changes: "Changes",
+    problems: "Problems",
+    monitor: "Monitor",
+    projectSettings: "Project Settings",
+  },
+  sidebar: {
+    project: "Project",
+    telemetry: "Hardware",
+    firmwareSize: "Firmware size",
+    build: "Build",
+    upload: "Upload",
+    monitor: "Monitor",
+    moreTargets: "More",
+    problems: "Problems",
+    doctor: "Doctor",
+    activeEnv: "Active env",
+    board: "Board",
+    claudeSession: "Claude session",
+  },
+  palette: {
+    placeholder: "Type a command or search…",
+    noResults: "No matching commands.",
+  },
+  shortcuts: {
+    build: "Build",
+    upload: "Upload",
+    monitor: "Monitor",
+    commandPalette: "Command palette",
+    settings: "Settings",
+    stop: "Stop",
+  },
+  onboarding: {
+    title: "Welcome to Vibe Hardware",
+    step1Title: "Install the toolchain",
+    step2Title: "Sign in to Claude",
+    step3Title: "Trust & privacy",
+    step4Title: "Create your first project",
+    skip: "Skip for now",
+    next: "Next",
+    back: "Back",
+    finish: "Get started",
+  },
+  settings: {
+    title: "Global Settings",
+    toolchain: "Toolchain",
+    claude: "Claude",
+    pio: "PlatformIO",
+    appearance: "Appearance",
+    editor: "Editor",
+    advanced: "Advanced",
+    theme: "Theme",
+    themeSystem: "Follow OS",
+    themeLight: "Light",
+    themeDark: "Dark",
+    close: "Close",
+  },
+} as const;

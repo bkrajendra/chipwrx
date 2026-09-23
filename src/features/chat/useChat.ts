@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppError, TurnRecord } from "../../lib/bindings";
+import type { AppError, ChatEvent, TurnRecord } from "../../lib/bindings";
 import { renderAppError } from "../../lib/errors";
 import { claudeHistory, claudeNewSession, claudeSendTurn, claudeStopTurn } from "../../lib/ipc";
 import { applyEvent, toTurnRecord, type LiveTurn } from "./blocks";
@@ -28,6 +28,45 @@ export function useChat(workspaceId: string) {
   const [live, setLive] = useState<LiveTurn | null>(null);
   const [error, setError] = useState<string | null>(null);
   const stopTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // `NFR-P2`: "text deltas are batched per animation frame, not per event" — a 200KB
+  // streamed response can arrive as hundreds of small `textDelta` events; applying each one
+  // as its own `setLive` call would re-render that many times. Every event in a frame is
+  // queued here and folded into one `setLive` call per `requestAnimationFrame` instead.
+  const pendingEvents = useRef<ChatEvent[]>([]);
+  const rafId = useRef<number | null>(null);
+
+  const flushPendingEvents = useCallback(() => {
+    rafId.current = null;
+    const events = pendingEvents.current;
+    pendingEvents.current = [];
+    if (events.length === 0) return;
+    setLive((prev) => {
+      if (!prev) return prev;
+      let next = prev;
+      for (const ev of events) next = applyEvent(next, ev);
+      if (prev.running && !next.running && stopTimer.current) {
+        clearTimeout(stopTimer.current);
+        stopTimer.current = null;
+      }
+      return next;
+    });
+  }, []);
+
+  const queueEvent = useCallback(
+    (event: ChatEvent) => {
+      pendingEvents.current.push(event);
+      if (rafId.current === null) {
+        rafId.current = requestAnimationFrame(flushPendingEvents);
+      }
+    },
+    [flushPendingEvents],
+  );
+
+  useEffect(() => {
+    return () => {
+      if (rafId.current !== null) cancelAnimationFrame(rafId.current);
+    };
+  }, []);
 
   const reloadHistory = useCallback(async () => {
     setLoadingHistory(true);
@@ -49,7 +88,7 @@ export function useChat(workspaceId: string) {
   }, []);
 
   const send = useCallback(
-    async (prompt: string) => {
+    async (prompt: string, attachments: string[] = []) => {
       if (live?.running) return;
       setError(null);
 
@@ -75,24 +114,14 @@ export function useChat(workspaceId: string) {
       setLive(started);
 
       try {
-        const turnId = await claudeSendTurn({ workspace: workspaceId, prompt, attachments: [], policy: null, model: null }, (event) => {
-          setLive((prev) => {
-            if (!prev) return prev;
-            const next = applyEvent(prev, event);
-            if (prev.running && !next.running && stopTimer.current) {
-              clearTimeout(stopTimer.current);
-              stopTimer.current = null;
-            }
-            return next;
-          });
-        });
+        const turnId = await claudeSendTurn({ workspace: workspaceId, prompt, attachments, policy: null, model: null }, queueEvent);
         setLive((prev) => (prev ? { ...prev, turnId } : prev));
       } catch (e) {
         setError(describeSendError(e));
         setLive(null);
       }
     },
-    [live, workspaceId],
+    [live, workspaceId, queueEvent],
   );
 
   const stop = useCallback(() => {

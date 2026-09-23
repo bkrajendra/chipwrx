@@ -85,6 +85,7 @@ pub fn run() {
             commands::claude::claude_stop_turn,
             commands::claude::claude_new_session,
             commands::claude::claude_history,
+            commands::claude::attachment_add,
             commands::changes::changes_for_turn,
             commands::changes::changes_diff,
             commands::changes::changes_revert_file,

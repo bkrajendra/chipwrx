@@ -6,20 +6,15 @@
 // permissionPolicy` exists in the data model but M4 doesn't add `settings_set_project`).
 
 import { useEffect, useState } from "react";
-import type { GlobalSettings, GlobalSettingsPatch, PermissionPolicySetting } from "../../lib/bindings";
+import type { GlobalSettings, PermissionPolicySetting } from "../../lib/bindings";
 import { settingsGetGlobal, settingsSetGlobal } from "../../lib/ipc";
+import { emptyPatch } from "../../lib/settings";
 
 const LABELS: Record<PermissionPolicySetting, string> = {
   guarded: "Guarded",
   assisted: "Assisted",
   unrestricted: "Unrestricted",
 };
-
-/** `GlobalSettingsPatch`'s `Option<T>` fields are `T | null`, not `T?` — every key is
- * required, `null` meaning "leave unchanged." */
-function emptyPatch(): GlobalSettingsPatch {
-  return { toolchain: null, claude: null, pipeline: null, monitor: null, logs: null, editor: null, appearance: null, network: null, advanced: null };
-}
 
 export function PermissionPolicyControl({ workspacePath }: { workspacePath: string }) {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);

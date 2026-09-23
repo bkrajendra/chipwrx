@@ -12,10 +12,26 @@ export interface MonitorLine {
   tsMs: number;
 }
 
-/** Client-side display cap — separate from, and smaller than, the backend's own
+/** Client-side display cap defaults — separate from, and independent of, the backend's own
  * byte/line-capped ring buffer (`NFR-P3`), which is what `monitor_save_log` actually
- * writes. This just keeps the live view light. */
-const MAX_BUFFERED_LINES = 5000;
+ * writes. Callers pass `GlobalSettings.monitor.{maxLines,maxBytes}` to keep the *visible*
+ * buffer's cap in sync with the same setting that governs the backend one; these are just
+ * the fallback before that first settings read resolves. */
+const DEFAULT_MAX_LINES = 5000;
+const DEFAULT_MAX_BYTES = 2_000_000;
+
+function capLines(lines: MonitorLine[], maxLines: number, maxBytes: number): MonitorLine[] {
+  let start = Math.max(0, lines.length - maxLines);
+  let bytes = 0;
+  for (let i = lines.length - 1; i >= start; i--) {
+    bytes += lines[i].text.length;
+    if (bytes > maxBytes) {
+      start = i + 1;
+      break;
+    }
+  }
+  return start === 0 ? lines : lines.slice(start);
+}
 
 function isAppError(e: unknown): e is AppError {
   return typeof e === "object" && e !== null && "code" in e;
@@ -25,7 +41,7 @@ function describe(e: unknown): string {
   return isAppError(e) ? renderAppError(e).message : String(e);
 }
 
-export function useMonitor(workspaceId: string) {
+export function useMonitor(workspaceId: string, maxLines: number = DEFAULT_MAX_LINES, maxBytes: number = DEFAULT_MAX_BYTES) {
   const [connected, setConnected] = useState(false);
   const [port, setPort] = useState<string | null>(null);
   const [baud, setBaud] = useState<number | null>(null);
@@ -47,10 +63,7 @@ export function useMonitor(workspaceId: string) {
         const parts = combined.split("\n");
         partialRef.current = parts.pop() ?? "";
         if (parts.length > 0) {
-          setLines((prev) => {
-            const next = [...prev, ...parts.map((text) => ({ text, tsMs: ev.data.tsMs }))];
-            return next.length > MAX_BUFFERED_LINES ? next.slice(next.length - MAX_BUFFERED_LINES) : next;
-          });
+          setLines((prev) => capLines([...prev, ...parts.map((text) => ({ text, tsMs: ev.data.tsMs }))], maxLines, maxBytes));
         }
         break;
       }
@@ -74,7 +87,7 @@ export function useMonitor(workspaceId: string) {
       default:
         break;
     }
-  }, []);
+  }, [maxLines, maxBytes]);
 
   const start = useCallback(async () => {
     setError(null);

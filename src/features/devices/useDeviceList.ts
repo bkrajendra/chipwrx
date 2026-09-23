@@ -14,7 +14,7 @@ export function useDeviceList() {
   /** The most recently *newly connected* known-bridge device — `FR-DEV-9`'s toast source.
    * `null` once dismissed or superseded. */
   const [justConnected, setJustConnected] = useState<SerialDevice | null>(null);
-  /** Increments on every `device://changed` — lets a consumer (e.g. `DevicePanel`) react
+  /** Increments on every `device://changed` — lets a consumer (e.g. `TelemetryCard`) react
    * to a change (including a silent `FR-DEV-2` sticky rebind) without re-deriving it from
    * the `devices` array itself. */
   const [changeCount, setChangeCount] = useState(0);

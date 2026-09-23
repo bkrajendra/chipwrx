@@ -49,7 +49,7 @@ function IniSummary({ before, after }: { before: string; after: string }) {
   );
 }
 
-export function ChangesPanel({ workspaceId, turnId, onClose }: { workspaceId: string; turnId: string; onClose: () => void }) {
+export function ChangesPanelBody({ workspaceId, turnId }: { workspaceId: string; turnId: string }) {
   const [changes, setChanges] = useState<FileChange[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -122,19 +122,14 @@ export function ChangesPanel({ workspaceId, turnId, onClose }: { workspaceId: st
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
         <span className="text-sm font-medium">Changes{changes ? ` (${changes.length})` : ""}</span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => void revertAll()}
-            disabled={busy || !changes || changes.length === 0}
-            className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
-          >
-            Revert all
-          </button>
-          <button type="button" onClick={onClose} className="text-xs text-neutral-500 hover:underline dark:text-neutral-400">
-            Close
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={() => void revertAll()}
+          disabled={busy || !changes || changes.length === 0}
+          className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        >
+          Revert all
+        </button>
       </header>
 
       {hasOutside && (
@@ -167,14 +162,14 @@ export function ChangesPanel({ workspaceId, turnId, onClose }: { workspaceId: st
                   </span>
                 )}
               </button>
-              <span className="shrink-0 font-mono text-[10px] text-neutral-400">
+              <span className="shrink-0 font-mono text-[10px] text-neutral-500 dark:text-neutral-400">
                 +{c.additions} -{c.deletions}
               </span>
               <button
                 type="button"
                 onClick={() => void revertOne(c.path)}
                 disabled={busy}
-                className="shrink-0 text-neutral-400 hover:text-neutral-700 disabled:opacity-40 dark:hover:text-neutral-200"
+                className="shrink-0 text-neutral-500 hover:text-neutral-700 disabled:opacity-40 dark:text-neutral-400 dark:hover:text-neutral-200"
                 title={`Revert ${c.path}`}
               >
                 ↺

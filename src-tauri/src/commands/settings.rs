@@ -48,6 +48,7 @@ pub struct GlobalSettingsPatch {
     pub appearance: Option<crate::core::settings::AppearanceSettings>,
     pub network: Option<crate::core::settings::NetworkSettings>,
     pub advanced: Option<crate::core::settings::AdvancedSettings>,
+    pub onboarding_completed: Option<bool>,
 }
 
 #[tauri::command]
@@ -83,6 +84,9 @@ pub async fn settings_set_global(
     }
     if let Some(v) = patch.advanced {
         guard.advanced = v;
+    }
+    if let Some(v) = patch.onboarding_completed {
+        guard.onboarding_completed = v;
     }
 
     let dir = config_dir(&app)?;

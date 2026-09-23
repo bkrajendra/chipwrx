@@ -112,9 +112,14 @@ pub async fn claude_send_turn(
     let turn_id = TurnId::new();
     let started_at = chrono::Utc::now().to_rfc3339();
 
+    // `FR-CHAT-9`: attachments are referenced by relative path in the prompt text actually
+    // sent to the CLI so Claude's own `Read` tool fetches them — the *displayed*/recorded
+    // prompt (`prompt_for_record`, below) stays the user's original clean text.
+    let effective_prompt = crate::core::claude::attachments::augment_prompt(&req.prompt, &req.attachments);
+
     let mut redacted_argv = vec![claude.program.display().to_string()];
     redacted_argv.extend(claude.extra_args.clone());
-    redacted_argv.extend(build_turn_args(&req.prompt, policy, permission_prompts_none, &model, &session));
+    redacted_argv.extend(build_turn_args(&effective_prompt, policy, permission_prompts_none, &model, &session));
     let redacted_argv: Vec<String> = redacted_argv.iter().map(|a| redact(a, false)).collect();
 
     // `FR-SAFE-1`: a snapshot before each turn, so it can always be reverted regardless of
@@ -134,7 +139,7 @@ pub async fn claude_send_turn(
             claude: &claude,
             workspace: &dir,
             turn_id: turn_id.clone(),
-            prompt: &req.prompt,
+            prompt: &effective_prompt,
             session,
             policy,
             model: &model,
@@ -333,4 +338,16 @@ pub async fn claude_history(
         turns.drain(0..start);
     }
     Ok(turns)
+}
+
+/// `FR-CHAT-9`: copies a file the user picked (via the frontend's own file-open dialog —
+/// this command never shows a dialog itself) into `.vibe/attachments/`, returning the
+/// workspace-relative path to add to the next turn's `attachments`.
+#[tauri::command]
+pub async fn attachment_add(registry_state: State<'_, ProjectRegistryState>, workspace: String, source_path: String) -> Result<String, AppError> {
+    let dir = {
+        let reg = registry_state.0.lock().await;
+        entry_path(&reg, &workspace)?
+    };
+    crate::core::claude::attachments::add(&dir, std::path::Path::new(&source_path))
 }

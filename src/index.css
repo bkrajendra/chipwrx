@@ -1,38 +1,49 @@
 @import "tailwindcss";
 
-/* Without this, native form controls (a <select>'s dropdown popup, scrollbars) default to
-   light-mode rendering regardless of the OS theme, while Tailwind's `dark:` utilities still
-   apply our (near-white) text color to elements like <option> — white text on the browser's
-   default white popup background. Declaring both schemes lets the browser pick a properly
-   contrasted native-control palette that matches `prefers-color-scheme`. */
+/* `FR-UI-7`: theme follows the OS by default but is user-overridable
+   (`GlobalSettings.appearance.theme`), so dark mode can't be a pure media query — it has to
+   be driven by an explicit class the app controls (`useTheme` sets/clears `.dark` on
+   `<html>`, resolving "system" via `matchMedia` itself). This makes Tailwind's `dark:`
+   variant key off that class instead of its v4 default (`prefers-color-scheme` media
+   query). */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   color-scheme: light dark;
 }
+:root.dark {
+  color-scheme: dark;
+}
 
-/* `color-scheme` alone isn't a reliable fix on its own: it only changes which native
-   palette the browser/WebView *defaults* to, and in practice a <select>'s dropdown popup
-   is rendered as a native control that does not reliably inherit the page's own text
-   color the way normal elements do. A component that sets `dark:text-*` on the `<select>`
-   without ALSO giving the popup an explicit, matching background (easy to forget — six
-   `<select>` elements across the Device/Ini panels shipped exactly this way) ends up with
-   unreadable white-on-white (or black-on-black) dropdown items. Rather than rely on every
-   component remembering both halves, every `<select>`/`<option>` in the app gets an
-   explicit background and text color here, once, so this class of bug cannot recur no
-   matter which screen adds the next dropdown. Individual components may still add their
-   own Tailwind color classes on top (for the closed control's border/sizing/etc) — those
-   never need to repeat this fix themselves again. Colors match the neutral palette already
-   used everywhere else (`bg-white`/`text-neutral-900` light, `bg-neutral-900`/
-   `text-neutral-100` dark). */
+/* A <select>'s dropdown popup is a native control that does not reliably inherit the
+   page's own text color. A component that sets `dark:text-*` on the `<select>` without
+   ALSO giving the popup an explicit, matching background (easy to forget — six `<select>`
+   elements across the Device/Ini panels shipped exactly this way) ends up with unreadable
+   white-on-white (or black-on-black) dropdown items. Rather than rely on every component
+   remembering both halves, every `<select>`/`<option>` in the app gets an explicit
+   background and text color here, once, keyed off the same `.dark` class as everything
+   else — so this class of bug cannot recur no matter which screen adds the next dropdown,
+   and can never disagree with the rest of the app's resolved theme. Individual components
+   may still add their own Tailwind color classes on top (for the closed control's
+   border/sizing/etc) — those never need to repeat this fix themselves again. Colors match
+   the neutral palette already used everywhere else (`bg-white`/`text-neutral-900` light,
+   `bg-neutral-900`/`text-neutral-100` dark). */
 select,
 select option {
   background-color: #ffffff;
   color: #171717;
 }
+:root.dark select,
+:root.dark select option {
+  background-color: #171717;
+  color: #f5f5f5;
+}
 
-@media (prefers-color-scheme: dark) {
-  select,
-  select option {
-    background-color: #171717;
-    color: #f5f5f5;
-  }
+/* `NFR-A1`: "visible focus rings." The browser's default outline is inconsistent across
+   controls and easy to accidentally suppress with `outline-none` on just the wrong
+   element; a single high-contrast focus-visible ring here covers every focusable element
+   in the app instead of requiring each component to opt in. */
+:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
 }

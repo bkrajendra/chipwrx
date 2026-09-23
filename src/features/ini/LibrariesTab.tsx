@@ -164,7 +164,7 @@ export function LibrariesTab({ workspaceId, onBusyChange }: { workspaceId: strin
                   <span className="font-medium">
                     {pkg.owner}/{pkg.name}
                   </span>
-                  <span className="text-neutral-400">v{pkg.version}</span>
+                  <span className="text-neutral-500 dark:text-neutral-400">v{pkg.version}</span>
                 </div>
                 <p className="mt-0.5 line-clamp-2 text-neutral-500 dark:text-neutral-400">{pkg.description}</p>
                 <div className="mt-1 flex items-center gap-2">
@@ -195,12 +195,12 @@ export function LibrariesTab({ workspaceId, onBusyChange }: { workspaceId: strin
 
       <div className="px-4 py-2">
         <p className="mb-1 text-[11px] font-medium text-neutral-500 dark:text-neutral-400">Installed</p>
-        {installed.length === 0 && <p className="text-xs text-neutral-400">Nothing installed for this environment yet.</p>}
+        {installed.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">Nothing installed for this environment yet.</p>}
         {installed.map((pkg) => (
           <div key={`${pkg.kind}-${pkg.name}`} className="flex items-center justify-between gap-2 border-b border-neutral-100 py-1.5 text-xs last:border-0 dark:border-neutral-900">
             <div>
               <span className="font-medium">{pkg.name}</span>
-              <span className="ml-1.5 text-neutral-400">v{pkg.version}</span>
+              <span className="ml-1.5 text-neutral-500 dark:text-neutral-400">v{pkg.version}</span>
               {outdatedNames.has(pkg.name) && (
                 <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[10px] text-amber-800 dark:bg-amber-950 dark:text-amber-300">outdated</span>
               )}

@@ -1,6 +1,5 @@
-// The `platformio.ini` side panel: Form/Raw/Libraries/Templates/PIO Settings tabs over one
-// `IniDocument` (`FR-INI-1`). Toggled from the Chat header, same pattern as
-// `PipelinePanel`/`ChangesPanel`/`DevicePanel`.
+// Canvas "Project Settings" tab (`FR-UI-3`): Form/Raw/Libraries/Templates/PIO Settings
+// over one `IniDocument` (`FR-INI-1`).
 
 import { useCallback, useState } from "react";
 import type { LintReport } from "../../lib/bindings";
@@ -13,7 +12,7 @@ import { useIni } from "./useIni";
 
 type Tab = "form" | "raw" | "libraries" | "templates" | "pio-settings";
 
-export function IniPanel({ workspaceId, onClose }: { workspaceId: string; onClose: () => void }) {
+export function IniPanel({ workspaceId }: { workspaceId: string }) {
   const { schema, document, loading, error, conflict, reload, applyEdits, writeRaw, lint } = useIni(workspaceId);
   const [tab, setTab] = useState<Tab>("form");
   const [lintReport, setLintReport] = useState<LintReport | null>(null);
@@ -33,14 +32,9 @@ export function IniPanel({ workspaceId, onClose }: { workspaceId: string; onClos
     <div className="flex h-full flex-col">
       <header className="flex items-center justify-between gap-2 border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
         <span className="text-sm font-medium">platformio.ini</span>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => void runLint()} disabled={linting} className="text-xs text-neutral-500 hover:underline dark:text-neutral-400">
-            {linting ? "Linting…" : "Lint"}
-          </button>
-          <button type="button" onClick={onClose} className="text-xs text-neutral-500 hover:underline dark:text-neutral-400">
-            Close
-          </button>
-        </div>
+        <button type="button" onClick={() => void runLint()} disabled={linting} className="text-xs text-neutral-500 hover:underline dark:text-neutral-400">
+          {linting ? "Linting…" : "Lint"}
+        </button>
       </header>
 
       {conflict && (
@@ -92,7 +86,7 @@ export function IniPanel({ workspaceId, onClose }: { workspaceId: string; onClos
         {!loading && document && tab === "templates" && <TemplatesTab workspaceId={workspaceId} document={document} onApplied={() => void reload()} />}
         {!loading && tab === "pio-settings" && <PioSettingsTab />}
       </div>
-      {librariesBusy && <p className="px-4 py-1 text-[11px] text-neutral-400">Working…</p>}
+      {librariesBusy && <p className="px-4 py-1 text-[11px] text-neutral-500 dark:text-neutral-400">Working…</p>}
     </div>
   );
 }

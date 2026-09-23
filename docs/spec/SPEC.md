@@ -702,3 +702,32 @@ Requirements are numbered `FR-<area>-<n>` and referenced from `ROADMAP.md`.
     a real CRLF `platformio.ini` in this environment. Revisit if this turns out to matter in
     practice — the fix would be capturing/reinserting each line's original terminator around
     the textarea rather than trusting its `.value`.
+35. `NFR-A3` ("all user-facing strings in one resource module from day one") is only
+    partially satisfied. M8 adds `src/lib/strings.ts` and routes the *new* shell chrome
+    through it (sidebar labels, canvas tabs, command palette, onboarding, the global
+    settings screen's section names) — the feature-internal copy M2–M7 already shipped
+    (chat block text, panel-specific labels across `ini`/`devices`/`pipeline`/`changes`)
+    stays inline. A full retrofit of every pre-existing string was out of scope for this
+    session; revisit before a real i18n pass is needed.
+36. `FR-UI-9` ("multiple windows, one workspace each... `PortBroker` is global across
+    windows") is implemented (`WebviewWindow` from `Workspace`'s "open in new window", a
+    `workspace-*` capability pattern, and `?workspace=<id>` read by `App.tsx` to skip the
+    Launcher) but not exercised against a second real OS window in this environment — this
+    session's tooling can drive a Chrome tab, not a second native Tauri window, so "two
+    windows open on two projects cannot both claim the same port" (the milestone's own
+    acceptance wording) is architecturally true (one global `PortBroker`, already verified
+    in M6) but not observed end-to-end with two actual windows. Worth a manual pass before
+    relying on it.
+37. The WCAG 2.1 AA contrast pass (`NFR-A2`) was a manual spot-check, not an automated
+    audit (e.g. `axe-core`) — it found and fixed one systemic issue (bare `text-neutral-400`
+    on a light background falls to ~2.5:1, below the 4.5:1 AA threshold for normal text;
+    every occurrence across both M8's new shell code and earlier milestones' panels now
+    pairs it with `text-neutral-500` in light mode) but wasn't exhaustive over every color
+    combination in the app (badges, focus states, disabled controls). A real accessibility
+    audit tool run is recommended before this milestone's acceptance claim is fully trusted.
+38. `FR-CHAT-9` attachments has no file size or type limit — a user can attach an
+    arbitrarily large file, which `core::claude::attachments::add` will happily copy into
+    `.vibe/attachments/` and reference in the prompt text Claude's `Read` tool then fetches.
+    Neither `SPEC.md` nor `CLI-CONTRACT.md` specifies a limit; none was invented. Revisit if
+    a large attachment turns out to cause real problems (slow copies, a bloated `.vibe/`,
+    or a prompt that blows past context).
