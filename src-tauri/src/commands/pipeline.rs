@@ -1,9 +1,12 @@
 //! Thin Tauri command handlers for the build/upload pipeline. See `IPC-CONTRACT.md` §5.
 //! Logic lives in `core::pio::{run,pipeline,build_history,targets}` and `core::diag`.
 
+use crate::commands::monitor::{self, MonitorState};
 use crate::commands::project::ProjectRegistryState;
 use crate::commands::settings::SettingsState;
 use crate::commands::util::{cache_dir, run_blocking};
+use crate::core::device::broker::{LeaseHolder, PortBroker};
+use crate::core::device::monitor::MonitorEvent;
 use crate::core::pio::build_history::{self, BuildKind, BuildRecord, BuildSize, DefectCount};
 use crate::core::pio::pipeline::{self, PipelineRegistry, PipelineState, PipelineStep};
 use crate::core::pio::run as pio_run;
@@ -28,12 +31,12 @@ pub struct PipelineRegistryState(pub Mutex<PipelineRegistry>);
 /// `pipeline_stop` — mirrors `commands::claude::ActiveTurnsState`'s shape.
 pub struct ActivePipelineProcs(pub Mutex<HashMap<String, ProcId>>);
 
-async fn resolved_pio(supervisor: &ProcessSupervisor, settings: &SettingsState) -> Option<resolve::Resolution> {
+pub(crate) async fn resolved_pio(supervisor: &ProcessSupervisor, settings: &SettingsState) -> Option<resolve::Resolution> {
     let pio_path = settings.0.lock().await.toolchain.pio_path.clone();
     probes::resolve_tool(Tool::Pio, pio_path.as_deref(), supervisor).await
 }
 
-async fn workspace_dir_and_env(
+pub(crate) async fn workspace_dir_and_env(
     registry_state: &State<'_, ProjectRegistryState>,
     id: &str,
 ) -> Result<(PathBuf, String), AppError> {
@@ -88,6 +91,10 @@ async fn run_build_or_upload(
     label: &str,
     pio: &resolve::Resolution,
     on_event: Channel<ProcEvent>,
+    // `FR-DEV-4`: set only for an upload that preempted a running monitor on this
+    // workspace's selected port — `(port, the monitor's own event channel)`. Reattached
+    // once the run finishes, success or not.
+    reattach_monitor: Option<(String, Channel<MonitorEvent>)>,
 ) -> Result<ProcId, AppError> {
     // `State<'_, T>` can't be moved into `tokio::spawn`'s `'static` future (its lifetime is
     // tied to this call) — every access re-resolves through `AppHandle::state::<T>()`
@@ -216,6 +223,22 @@ async fn run_build_or_upload(
         };
         emit_pipeline_state(&app_for_task, &ws_for_task, &state);
         drop(reg);
+
+        if kind == BuildKind::Upload {
+            crate::commands::device::poll_after_upload(&app_for_task).await;
+
+            if let Some((port, monitor_events)) = reattach_monitor {
+                let broker = app_for_task.state::<PortBroker>();
+                if let Ok(lease) = broker.acquire(&port, LeaseHolder::Monitor, false) {
+                    if monitor::start_session(&app_for_task, &dir_for_task, &env_for_task, &ws_for_task, &port, lease, &monitor_events)
+                        .await
+                        .is_ok()
+                    {
+                        let _ = monitor_events.send(MonitorEvent::Reattached { port });
+                    }
+                }
+            }
+        }
 
         let active_procs = app_for_task.state::<ActivePipelineProcs>();
         active_procs.0.lock().await.remove(&ws_for_task);
@@ -359,16 +382,18 @@ pub async fn pipeline_build(
         install_action: true,
     })?;
     let args = pio_run::build_args(&dir, &env);
-    run_build_or_upload(app, &supervisor, dir, env, workspace, BuildKind::Build, args, "pio-run-build", &pio, on_event).await
+    run_build_or_upload(app, &supervisor, dir, env, workspace, BuildKind::Build, args, "pio-run-build", &pio, on_event, None).await
 }
 
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn pipeline_upload(
     app: AppHandle,
     supervisor: State<'_, ProcessSupervisor>,
     settings_state: State<'_, SettingsState>,
     registry_state: State<'_, ProjectRegistryState>,
     pipeline_state: State<'_, PipelineRegistryState>,
+    monitor_state: State<'_, MonitorState>,
     workspace: String,
     on_event: Channel<ProcEvent>,
 ) -> Result<ProcId, AppError> {
@@ -393,7 +418,33 @@ pub async fn pipeline_upload(
     })?;
     let preferred_port = workspace::load(&dir).ok().flatten().and_then(|s| s.device.preferred_port);
     let args = pio_run::upload_args(&dir, &env, preferred_port.as_deref());
-    run_build_or_upload(app, &supervisor, dir, env, workspace, BuildKind::Upload, args, "pio-run-upload", &pio, on_event).await
+
+    // `FR-DEV-4`: preempt this workspace's monitor if it's running and the setting allows
+    // it — stopping it now (freeing the port) and reattaching once the upload finishes.
+    let auto_reattach = settings_state.0.lock().await.pipeline.auto_reattach_monitor;
+    let reattach_monitor = if auto_reattach {
+        match (monitor_state.preempt_for_upload(&workspace).await, &preferred_port) {
+            (Some(channel), Some(port)) => Some((port.clone(), channel)),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    run_build_or_upload(
+        app,
+        &supervisor,
+        dir,
+        env,
+        workspace,
+        BuildKind::Upload,
+        args,
+        "pio-run-upload",
+        &pio,
+        on_event,
+        reattach_monitor,
+    )
+    .await
 }
 
 #[tauri::command]

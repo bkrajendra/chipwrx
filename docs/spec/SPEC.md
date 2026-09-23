@@ -614,3 +614,91 @@ Requirements are numbered `FR-<area>-<n>` and referenced from `ROADMAP.md`.
     `ProjectSettings.device.preferredPort` (already in `DATA-MODEL.md` §4, unused until
     now). Revisit once `PortBroker` exists in case device selection should route through
     it instead of a bare settings write.
+22. `ARCHITECTURE.md` §3 sketches `PortBroker::acquire` returning an RAII `Lease`, which
+    reads as though preemption (`FR-DEV-4`: stop the monitor, upload, restart the monitor)
+    should fall out of `Drop` alone. `Drop` is synchronous and can't `.await` stopping a
+    thread or restarting a monitor session, so M6 splits it: `PortBroker` itself only
+    tracks *who* holds a port and grants a lease unconditionally when `preempt: true`; the
+    actual "stop, do the thing, restart" sequence is orchestrated one layer up, in
+    `commands::monitor::MonitorState::preempt_for_upload` and
+    `commands::pipeline::run_build_or_upload`. Revisit if a future port user needs the same
+    preempt-and-resume shape and this orchestration should be factored out of `pipeline.rs`.
+23. **Resolved**, verified against real hardware. `CLI-CONTRACT.md` §7.5's documented ESP
+    telemetry invocation (`pio pkg exec -p "tool-esptoolpy" -- esptool.py flash_id`) has no
+    `--port` as written — tried against a real ESP32-C6-DevKitM-1 with several unrelated
+    Bluetooth COM ports also present, omitting `--port` made esptool probe *every* serial
+    port in turn (each with its own connect timeout), taking far longer and producing noisy
+    interleaved errors before eventually reaching the right one by elimination. `--port` is
+    esptool's own flag, not a `pio` one — everything after `pio pkg exec`'s `--` is
+    forwarded to the sub-command verbatim, so passing it isn't inventing a `pio` flag
+    (`CLAUDE.md` hard rule 1 is about `pio`/`claude` flags specifically). `core::device::telemetry`
+    now passes `--port <the selected device's port>` explicitly.
+24. **Resolved**, verified against real hardware. `esptool.py flash_id`'s own output format
+    (`Manufacturer:`/`Detected flash size:` lines) is now captured in
+    `tests/fixtures/esptool-flash-id-real.txt`, from the same real ESP32-C6-DevKitM-1 run
+    that resolved open question 23 — `Manufacturer: c8` / `Detected flash size: 8MB`, which
+    matched the parser's regexes without changes. That run also surfaced two esptool v5.3.0
+    deprecation warning lines (`'esptool.py' is deprecated`, `'flash_id' is deprecated`)
+    between the package-prefix line and the connect banner, which the fixture now covers —
+    the parser already tolerated them since its regexes search anywhere in the text.
+25. `pio device monitor`'s `--parity` accepts `N|E|O|S|M` (`CLI-CONTRACT.md` §3.3), but the
+    `serialport` crate's `Parity` enum only has `None`/`Odd`/`Even` — no Space or Mark.
+    `core::device::monitor::settings_from_ini` falls back to `None` for `S`/`M`. Revisit if
+    a board that actually needs space/mark parity shows up (rare outside older RS-232 gear).
+26. The in-app serial monitor (`core::device::monitor`) was implemented and unit-tested
+    (settings parsing, EOL mapping, ring buffer capping) but not exercised against real
+    hardware in this environment, unlike M5's Build/Upload path. Baud/parity/RTS/DTR
+    handling and the read/write thread's actual behavior against a physical board should be
+    verified before this ships — see the acceptance-test notes for this milestone.
+27. `NFR-P3` specifies the serial monitor's ring buffer is "capped by line count and total
+    bytes" but gives no figures (only the log pane's 50,000-line default is stated
+    elsewhere). M6 picks `DEFAULT_MAX_LINES = 10_000` / `DEFAULT_MAX_BYTES = 5 MiB` as a
+    starting point — unverified against any product decision. Revisit if these should be
+    user-configurable via `GlobalSettings` the way `logs.maxLines` already is.
+28. `device_telemetry`'s `refresh: bool` parameter (`IPC-CONTRACT.md` §6) mirrors
+    `pipeline_targets`/`boards_list`'s cache-bypass convention, but telemetry is never
+    cached in the first place (it always probes live hardware), so `refresh` currently has
+    no effect. Kept for signature parity with the documented command; revisit if telemetry
+    ever gains a cache worth bypassing.
+29. `FR-DEV-6`'s "Open in terminal" needs a platform mechanism to launch a visible terminal
+    running `pio device monitor -d … -e …`, which `CLI-CONTRACT.md` documents the invocation
+    for but not the terminal-launch mechanism itself (that's OS-level, not a `pio`/`claude`
+    flag). M6 implements this for Windows only (`cmd.exe /c start "" …`), since this dev
+    environment is Windows-only and macOS/Linux's equivalents (`open -a Terminal`,
+    `x-terminal-emulator`, etc.) aren't verifiable here. `monitor_open_external` returns a
+    clear `AppError::Io` on other platforms rather than guessing. Revisit once macOS/Linux
+    can be tested.
+30. `DATA-MODEL.md` §8.1's multi-value continuation example shows `build_flags =` with no
+    trailing space before the newline. A real `pio pkg install` run this session (writing
+    `lib_deps` with two entries) showed `lib_deps = ` **with** a trailing space. `core::ini`'s
+    own writer (`patch::format_entry_lines`) matches the real capture, not the doc example —
+    verified byte-identical against `pio`'s own output in
+    `core::ini::patch::tests::the_real_fixture_survives_an_edit_and_a_revert_byte_identical`.
+31. `core::ini::document::resolve_inherited_from`'s `extends` handling only follows one
+    level — if `env:b extends env:a` and `env:a extends env:c`, an option `env:b` inherits
+    from `env:c` (two hops away) resolves to `inherited_from: None` rather than naming
+    `env:c`, since the effective JSON has no origin-section field to cross-check against
+    beyond one hop. Revisit if multi-level `extends` chains turn out to be common.
+32. `CLI-CONTRACT.md` §2.3 documents 8 global `pio settings` names; a real
+    `pio settings get` capture against this session's installed Core only returned 6 —
+    `enable_telemetry` and `disable_udev_rules_check` both returned an empty table when
+    queried by name individually (possibly removed/platform-gated in this Core version).
+    `core::pio::global_settings` parses whatever the table actually contains rather than
+    assuming the documented 8, which sidesteps the discrepancy but doesn't explain it.
+    Separately, every row in that same capture was already at its default, so whether/how a
+    *non-default* row's `[default]` bracket is actually formatted remains unverified.
+33. `ini_template_apply`'s IPC signature (`workspace, name -> IniDocument`) writes
+    immediately, but `DATA-MODEL.md` §10 says applying a template should show "the resulting
+    diff for confirmation before writing." There's no separate non-mutating preview command
+    in the given IPC surface to support a true before-write confirmation. M7's Templates tab
+    approximates it: apply writes immediately, then offers an "Undo" (`ini_write_raw` back to
+    the pre-apply raw, using the post-apply `mtimeMs` the reload picked up) rather than
+    gating the write on a prior confirmation. Revisit if a dedicated preview command
+    (`ini_template_preview`?) is added.
+34. The Raw tab (`FR-INI-1`) uses a plain HTML `<textarea>`, which normalizes line endings
+    to `\n` on read regardless of the file's actual `\r\n`/`\n` mix — a Raw-tab edit to a
+    CRLF file could silently flip it to LF, unlike Form-tab edits (which go through
+    `ini_apply`'s surgical, EOL-preserving patcher and are unaffected). Not verified against
+    a real CRLF `platformio.ini` in this environment. Revisit if this turns out to matter in
+    practice — the fix would be capturing/reinserting each line's original terminator around
+    the textarea rather than trusting its `.value`.

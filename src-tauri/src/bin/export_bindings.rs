@@ -17,13 +17,24 @@ use vibe_hardware_lib::commands::settings::GlobalSettingsPatch;
 use vibe_hardware_lib::core::claude::ids::{SessionId, TurnId};
 use vibe_hardware_lib::core::claude::session::{SessionIndex, SessionIndexEntry, TurnRecord, TurnResultMeta, TurnToolCall};
 use vibe_hardware_lib::core::claude::types::{ChatEvent, PermissionPolicy, TurnRequest};
+use vibe_hardware_lib::core::device::hotplug::DeviceChanged;
 use vibe_hardware_lib::core::device::list::SerialDevice;
+use vibe_hardware_lib::core::device::monitor::MonitorEvent;
+use vibe_hardware_lib::core::device::telemetry::Telemetry;
+use vibe_hardware_lib::core::ini::document::{IniDocument, IniEntry, IniSection};
+use vibe_hardware_lib::core::ini::lint::{LintError, LintReport};
+use vibe_hardware_lib::core::ini::patch::IniEdit;
+use vibe_hardware_lib::core::ini::schema::IniOptionSchema;
 use vibe_hardware_lib::core::pio::boards::{BoardBrief, BoardSource};
 use vibe_hardware_lib::core::pio::build_history::{BuildKind, BuildRecord, BuildSize, DefectCount};
+use vibe_hardware_lib::core::pio::global_settings::PioSetting;
 use vibe_hardware_lib::core::pio::init::CreateProjectRequest;
+use vibe_hardware_lib::core::pio::packages::{InstalledPackage, OutdatedPackage, PkgKind};
 use vibe_hardware_lib::core::pio::pipeline::{PipelineState, PipelineStep};
+use vibe_hardware_lib::core::pio::registry::{PackagePage, RegistryPackage};
 use vibe_hardware_lib::core::proc::events::{Defect, DefectSource, ProcEvent, Severity, SizeUsage};
 use vibe_hardware_lib::core::proc::{LogLine, ProcId, ProcKind, ProcSummary, StdStream};
+use vibe_hardware_lib::core::project::templates::IniTemplate;
 use vibe_hardware_lib::core::project::types::{
     CreatedBy, DeviceSettings, ProjectClaudeSettings, ProjectEntry, ProjectPipelineSettings, ProjectSettings,
     StickyHwid, TrustScan,
@@ -136,8 +147,27 @@ fn main() {
     emit!(BuildSize);
     emit!(BuildRecord);
 
-    // Devices (IPC-CONTRACT.md §6, minimal pre-PortBroker slice)
+    // Devices, telemetry, monitor (IPC-CONTRACT.md §6)
     emit!(SerialDevice);
+    emit!(DeviceChanged);
+    emit!(Telemetry);
+    emit!(MonitorEvent);
+
+    // platformio.ini and packages (IPC-CONTRACT.md §7)
+    emit!(IniOptionSchema);
+    emit!(IniEntry);
+    emit!(IniSection);
+    emit!(IniDocument);
+    emit!(IniEdit);
+    emit!(LintError);
+    emit!(LintReport);
+    emit!(IniTemplate);
+    emit!(PkgKind);
+    emit!(InstalledPackage);
+    emit!(OutdatedPackage);
+    emit!(RegistryPackage);
+    emit!(PackagePage);
+    emit!(PioSetting);
 
     // Resolved from `CARGO_MANIFEST_DIR` (always `src-tauri/`), not the process's current
     // directory — `npm run gen:bindings` invokes this via `cargo run --manifest-path`,

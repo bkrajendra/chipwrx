@@ -47,6 +47,14 @@ pub fn read_value(ini_text: &str, section: &str, key: &str) -> Option<String> {
     None
 }
 
+/// Reads `key` from `[env:<env_name>]`, falling back to the generic `[env]` section —
+/// matches PlatformIO's own inheritance for env-scoped options like `monitor_*`
+/// (`CLI-CONTRACT.md` §3.3: "it reads the env's `monitor_*` options", and the worked
+/// example at §2.4 shows `monitor_speed` set in `[env]` and inherited into `[env:esp32dev]`).
+pub fn read_value_with_fallback(ini_text: &str, env_name: &str, key: &str) -> Option<String> {
+    read_value(ini_text, &format!("env:{env_name}"), key).or_else(|| read_value(ini_text, "env", key))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -143,5 +151,40 @@ framework = arduino
     #[test]
     fn read_value_missing_key_returns_none() {
         assert_eq!(read_value(MULTI_ENV_INI, "env:esp32dev", "upload_protocol"), None);
+    }
+
+    const INI_WITH_INHERITED_MONITOR: &str = "\
+[env]
+monitor_speed = 115200
+
+[env:esp32dev]
+platform = espressif32
+board = esp32dev
+
+[env:uno]
+platform = atmelavr
+board = uno
+monitor_speed = 9600
+";
+
+    #[test]
+    fn fallback_inherits_from_the_generic_env_section() {
+        assert_eq!(
+            read_value_with_fallback(INI_WITH_INHERITED_MONITOR, "esp32dev", "monitor_speed"),
+            Some("115200".to_string())
+        );
+    }
+
+    #[test]
+    fn fallback_prefers_the_named_envs_own_value() {
+        assert_eq!(
+            read_value_with_fallback(INI_WITH_INHERITED_MONITOR, "uno", "monitor_speed"),
+            Some("9600".to_string())
+        );
+    }
+
+    #[test]
+    fn fallback_returns_none_when_neither_section_has_the_key() {
+        assert_eq!(read_value_with_fallback(INI_WITH_INHERITED_MONITOR, "esp32dev", "upload_protocol"), None);
     }
 }

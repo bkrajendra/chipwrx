@@ -242,3 +242,71 @@ export type SerialDevice = { port: string, description: string, hwid: string, vi
  */
 knownBridge: string | null, };
 
+export type DeviceChanged = { added: Array<SerialDevice>, removed: Array<string>, };
+
+export type Telemetry = { adapter: string, connected: boolean, port: string | null, chip: string | null, flashSize: string | null, flashVendor: string | null, mac: string | null, board: BoardBrief | null, unavailableReason: string | null, };
+
+export type MonitorEvent = { "type": "opened", "data": { port: string, baud: number, } } | { "type": "data", "data": { chunk: string, tsMs: number, } } | { "type": "preempted", "data": { by: string, } } | { "type": "reattached", "data": { port: string, } } | { "type": "closed", "data": { reason: string, } } | { "type": "error", "data": { error: AppError, } };
+
+export type IniOptionSchema = { 
+/**
+ * `"env.build_flags"` — the extraction one-liner's own map key.
+ */
+key: string, scope: string, group: string, name: string, description: string, type: string, multiple: boolean, default: JsonValue | null, choices: Array<string> | null, min: number | null, max: number | null, sysenvvar: string | null, };
+
+export type IniEntry = { name: string, values: Array<string>, 
+/**
+ * `Some("env")` (or the target of an `extends` chain) when this option isn't declared
+ * in this section but the effective merge resolved a value for it anyway — `None`
+ * means it's either declared right here, or a PlatformIO built-in default with no
+ * traceable declaring section.
+ */
+inheritedFrom: string | null, };
+
+export type IniSection = { name: string, declared: Array<IniEntry>, effective: Array<IniEntry>, };
+
+export type IniDocument = { raw: string, sections: Array<IniSection>, mtimeMs: number, };
+
+export type IniEdit = { "type": "set", "data": { section: string, name: string, values: Array<string>, } } | { "type": "remove", "data": { section: string, name: string, } } | { "type": "addSection", "data": { name: string, } } | { "type": "removeSection", "data": { name: string, } } | { "type": "renameSection", "data": { from: string, to: string, } };
+
+export type LintError = { 
+/**
+ * The Python exception class name, e.g. `"ProjectOptionValueError"`, `"ParsingError"`.
+ */
+kind: string, message: string, 
+/**
+ * `"path:line"` when the CLI included one — only some error kinds do (see module doc).
+ */
+source: string | null, };
+
+export type LintReport = { errors: Array<LintError>, warnings: Array<string>, };
+
+export type IniTemplate = { schemaVersion: number, name: string, 
+/**
+ * RFC3339.
+ */
+createdAt: string, ini: string, boardId: string | null, claudeMd: string | null, };
+
+export type PkgKind = "platform" | "tool" | "library";
+
+export type InstalledPackage = { name: string, version: string, requiredSpec: string | null, kind: PkgKind, };
+
+export type OutdatedPackage = { name: string, current: string, wanted: string, latest: string, kind: string, environments: Array<string>, };
+
+export type RegistryPackage = { owner: string, name: string, type: string, tier: string, description: string, version: string, releasedAt: string | null, 
+/**
+ * Never filled in from the search response itself — the caller cross-references
+ * `pkg_installed` for the active workspace to populate this (`IPC-CONTRACT.md` §7).
+ */
+installedVersion: string | null, };
+
+export type PackagePage = { items: Array<RegistryPackage>, page: number, total: number, limit: number, };
+
+export type PioSetting = { name: string, currentValue: string, 
+/**
+ * Only known when the row's value column showed a `[default]` suffix — a real capture
+ * against every-setting-at-its-default never showed one, so whether/how a
+ * *non-default* row's bracket looks is unverified (`SPEC.md` §8 open question 32).
+ */
+defaultValue: string | null, description: string, };
+

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { AppError, TurnRecord } from "../../lib/bindings";
 import { ChangesPanel } from "../changes/ChangesPanel";
+import { DevicePanel } from "../devices/DevicePanel";
+import { IniPanel } from "../ini/IniPanel";
 import { renderAppError } from "../../lib/errors";
 import { PipelinePanel } from "../pipeline/PipelinePanel";
 import { PipelineStrip } from "../pipeline/PipelineStrip";
@@ -168,7 +170,7 @@ function LiveTurnCard({ live, onOpenChanges }: { live: LiveTurn; onOpenChanges: 
   );
 }
 
-type SidePanel = { kind: "changes"; turnId: string } | { kind: "pipeline" };
+type SidePanel = { kind: "changes"; turnId: string } | { kind: "pipeline" } | { kind: "devices" } | { kind: "ini" };
 
 export function ChatScreen({ workspaceId, workspaceName, workspacePath }: { workspaceId: string; workspaceName: string; workspacePath: string }) {
   const { history, live, loadingHistory, error, send, stop, newSession } = useChat(workspaceId);
@@ -189,6 +191,20 @@ export function ChatScreen({ workspaceId, workspaceName, workspacePath }: { work
         <div className="flex items-center gap-2">
           <PermissionPolicyControl workspacePath={workspacePath} />
           <PipelineStrip state={pipeline.state} onStop={pipeline.stop} onOpen={() => setSidePanel({ kind: "pipeline" })} />
+          <button
+            type="button"
+            onClick={() => setSidePanel({ kind: "devices" })}
+            className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            Device
+          </button>
+          <button
+            type="button"
+            onClick={() => setSidePanel({ kind: "ini" })}
+            className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            platformio.ini
+          </button>
           <button
             type="button"
             onClick={() => void newSession()}
@@ -239,6 +255,23 @@ export function ChatScreen({ workspaceId, workspaceName, workspacePath }: { work
                 void send(prompt);
               }}
             />
+          </div>
+        )}
+        {sidePanel?.kind === "devices" && (
+          <div className="w-[520px] shrink-0 border-l border-neutral-200 dark:border-neutral-800">
+            <DevicePanel
+              workspaceId={workspaceId}
+              onClose={() => setSidePanel(null)}
+              onSendToClaude={(prompt) => {
+                setSidePanel(null);
+                void send(prompt);
+              }}
+            />
+          </div>
+        )}
+        {sidePanel?.kind === "ini" && (
+          <div className="w-[560px] shrink-0 border-l border-neutral-200 dark:border-neutral-800">
+            <IniPanel workspaceId={workspaceId} onClose={() => setSidePanel(null)} />
           </div>
         )}
       </div>

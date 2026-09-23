@@ -12,7 +12,7 @@ use std::path::Path;
 use std::sync::LazyLock;
 use ts_rs::TS;
 
-#[derive(Debug, Clone, Serialize, TS)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 #[serde(rename_all = "camelCase")]
 pub struct SerialDevice {
     pub port: String,

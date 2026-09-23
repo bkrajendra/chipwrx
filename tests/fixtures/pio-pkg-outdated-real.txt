@@ -1,0 +1,10 @@
+Checking
+
+Semantic Versioning color legend:
+<Major Update>  backward-incompatible updates
+<Minor Update>  backward-compatible features
+<Patch Update>  backward-compatible bug fixes
+
+Package      Current    Wanted    Latest    Type     Environments
+-----------  ---------  --------  --------  -------  ------------------
+ArduinoJson  6.21.5     6.21.5    7.4.3     Library  esp32-c6-devkitm-1

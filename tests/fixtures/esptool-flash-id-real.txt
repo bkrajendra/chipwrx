@@ -1,0 +1,26 @@
+Using tool-esptoolpy@5.3.0 package
+Warning: DEPRECATED: 'esptool.py' is deprecated. Please use 'esptool' instead. The '.py' suffix will be removed in a future major release.
+Warning: Deprecated: Command 'flash_id' is deprecated. Use 'flash-id' instead.
+esptool v5.3.0
+Serial port COM10:
+Connecting....
+Detecting chip type... ESP32-C6
+Connected to ESP32-C6 on COM10:
+Chip type:          ESP32-C6 (QFN40) (revision v0.2)
+Features:           Wi-Fi 6, BT 5 (LE), IEEE802.15.4, Single Core + LP Core, 160MHz, Unknown Embedded Flash
+Crystal frequency:  40MHz
+MAC:                10:51:db:ff:fe:03:97:dc
+BASE MAC:           10:51:db:03:97:dc
+MAC_EXT:            ff:fe
+
+Uploading stub flasher...
+Running stub flasher...
+Stub flasher running.
+
+Flash Memory Information:
+=========================
+Manufacturer: c8
+Device: 4017
+Detected flash size: 8MB
+
+Hard resetting via RTS pin...

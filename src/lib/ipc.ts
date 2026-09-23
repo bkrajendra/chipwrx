@@ -11,13 +11,25 @@ import type {
   FileDiff,
   GlobalSettings,
   GlobalSettingsPatch,
+  IniDocument,
+  IniEdit,
+  IniOptionSchema,
+  IniTemplate,
   InstallEvent,
+  InstalledPackage,
+  LintReport,
+  MonitorEvent,
+  OutdatedPackage,
+  PackagePage,
   PipelineState,
+  PioSetting,
+  PkgKind,
   ProbeResult,
   ProcEvent,
   ProjectEntry,
   RemediationKind,
   SerialDevice,
+  Telemetry,
   ToolchainTool,
   TrustScan,
   TurnRecord,
@@ -196,4 +208,104 @@ export function deviceList(): Promise<SerialDevice[]> {
 
 export function deviceSetPreferredPort(workspace: string, port: string | null): Promise<void> {
   return invoke("device_set_preferred_port", { workspace, port });
+}
+
+export function deviceSelect(workspace: string, port: string): Promise<void> {
+  return invoke("device_select", { workspace, port });
+}
+
+export function deviceTelemetry(workspace: string, refresh: boolean): Promise<Telemetry> {
+  return invoke("device_telemetry", { workspace, refresh });
+}
+
+export function monitorStart(workspace: string, onEvent: (event: MonitorEvent) => void): Promise<string> {
+  const channel = new Channel<MonitorEvent>();
+  channel.onmessage = onEvent;
+  return invoke("monitor_start", { workspace, onEvent: channel });
+}
+
+export function monitorStop(workspace: string): Promise<void> {
+  return invoke("monitor_stop", { workspace });
+}
+
+export function monitorSend(workspace: string, text: string): Promise<void> {
+  return invoke("monitor_send", { workspace, text });
+}
+
+export function monitorSaveLog(workspace: string, path: string): Promise<void> {
+  return invoke("monitor_save_log", { workspace, path });
+}
+
+export function monitorOpenExternal(workspace: string): Promise<void> {
+  return invoke("monitor_open_external", { workspace });
+}
+
+export function iniSchema(): Promise<IniOptionSchema[]> {
+  return invoke("ini_schema");
+}
+
+export function iniRead(workspace: string): Promise<IniDocument> {
+  return invoke("ini_read", { workspace });
+}
+
+export function iniApply(workspace: string, edits: IniEdit[], expectedMtimeMs: number): Promise<IniDocument> {
+  return invoke("ini_apply", { workspace, edits, expectedMtimeMs });
+}
+
+export function iniWriteRaw(workspace: string, raw: string, expectedMtimeMs: number): Promise<IniDocument> {
+  return invoke("ini_write_raw", { workspace, raw, expectedMtimeMs });
+}
+
+export function iniLint(workspace: string): Promise<LintReport> {
+  return invoke("ini_lint", { workspace });
+}
+
+export function iniTemplateSave(workspace: string, name: string): Promise<void> {
+  return invoke("ini_template_save", { workspace, name });
+}
+
+export function iniTemplateList(): Promise<IniTemplate[]> {
+  return invoke("ini_template_list");
+}
+
+export function iniTemplateApply(workspace: string, name: string): Promise<IniDocument> {
+  return invoke("ini_template_apply", { workspace, name });
+}
+
+export function pkgSearch(query: string, qualifiers: [string, string][], page: number, sort?: string): Promise<PackagePage> {
+  return invoke("pkg_search", { query, qualifiers, page, sort: sort ?? null });
+}
+
+export function pkgInstall(workspace: string, spec: string, kind: PkgKind, onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pkg_install", { workspace, spec, kind, onEvent: channel });
+}
+
+export function pkgUninstall(workspace: string, spec: string, kind: PkgKind, onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pkg_uninstall", { workspace, spec, kind, onEvent: channel });
+}
+
+export function pkgInstalled(workspace: string): Promise<InstalledPackage[]> {
+  return invoke("pkg_installed", { workspace });
+}
+
+export function pkgOutdated(workspace: string): Promise<OutdatedPackage[]> {
+  return invoke("pkg_outdated", { workspace });
+}
+
+export function pioSettingsGet(): Promise<PioSetting[]> {
+  return invoke("pio_settings_get");
+}
+
+export function pioSettingsSet(name: string, value: string): Promise<PioSetting[]> {
+  return invoke("pio_settings_set", { name, value });
+}
+
+export function pioSystemPrune(onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pio_system_prune", { onEvent: channel });
 }

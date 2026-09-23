@@ -1,0 +1,2 @@
+ProjectOptionValueError  Invalid value: 'not_a_real_mode' is not one of 'off', 'chain', 'deep', 'chain+', 'deep+'. for `lib_ldf_mode` option in the `env:esp32-c6-devkitm-1` section (Control how Library Dependency Finder (LDF) should analyze dependencies (`#include` directives))
+Warning  Ignore unknown configuration option `totally_bogus_option` in section [env:esp32-c6-devkitm-1]
