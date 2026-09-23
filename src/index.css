@@ -8,3 +8,31 @@
 :root {
   color-scheme: light dark;
 }
+
+/* `color-scheme` alone isn't a reliable fix on its own: it only changes which native
+   palette the browser/WebView *defaults* to, and in practice a <select>'s dropdown popup
+   is rendered as a native control that does not reliably inherit the page's own text
+   color the way normal elements do. A component that sets `dark:text-*` on the `<select>`
+   without ALSO giving the popup an explicit, matching background (easy to forget — six
+   `<select>` elements across the Device/Ini panels shipped exactly this way) ends up with
+   unreadable white-on-white (or black-on-black) dropdown items. Rather than rely on every
+   component remembering both halves, every `<select>`/`<option>` in the app gets an
+   explicit background and text color here, once, so this class of bug cannot recur no
+   matter which screen adds the next dropdown. Individual components may still add their
+   own Tailwind color classes on top (for the closed control's border/sizing/etc) — those
+   never need to repeat this fix themselves again. Colors match the neutral palette already
+   used everywhere else (`bg-white`/`text-neutral-900` light, `bg-neutral-900`/
+   `text-neutral-100` dark). */
+select,
+select option {
+  background-color: #ffffff;
+  color: #171717;
+}
+
+@media (prefers-color-scheme: dark) {
+  select,
+  select option {
+    background-color: #171717;
+    color: #f5f5f5;
+  }
+}
