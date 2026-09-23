@@ -25,6 +25,7 @@ import { CommandPalette, type PaletteCommand } from "./CommandPalette";
 import { GlobalSettingsScreen } from "./GlobalSettingsScreen";
 import { Modal } from "./Modal";
 import { Sidebar } from "./Sidebar";
+import { ThemeToggle } from "./ThemeToggle";
 import { useGlobalSettingsCaps } from "./useGlobalSettingsCaps";
 import { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 
@@ -137,6 +138,7 @@ export function Workspace({ project, onBack }: { project: ProjectEntry; onBack: 
           <PipelineStrip state={pipeline.state} onStop={pipeline.stop} onOpen={() => setTab("logs")} />
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <PermissionPolicyControl workspacePath={project.path} />
           <button
             type="button"

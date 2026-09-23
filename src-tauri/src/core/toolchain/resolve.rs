@@ -62,7 +62,15 @@ fn bare_names(tool: Tool, platform: Platform) -> &'static [&'static str] {
         // removed) even when a perfectly good `python3`/`python` sits earlier on `PATH`;
         // trying the direct executables first avoids surfacing that launcher's error for a
         // Python install that's actually fine.
-        (Tool::Python, Platform::Windows) => &["python3", "python", "py"],
+        //
+        // The explicit `.exe` variants matter beyond style consistency with the
+        // Claude/PlatformIO lists above: `which_in` only appends `PATHEXT` extensions to a
+        // bare name using the *actual host OS*'s rules, not this function's `platform`
+        // parameter — so a bare `"py"` only ever resolves on a real Windows machine. Unit
+        // tests exercise the Windows path from Linux CI by construction (`Platform` is a
+        // simulated parameter, not `cfg!(windows)`), so without the explicit `.exe` name
+        // that coverage silently only ran on whichever OS happened to build the test binary.
+        (Tool::Python, Platform::Windows) => &["python3.exe", "python3", "python.exe", "python", "py.exe", "py"],
         (Tool::Python, _) => &["python3", "python"],
     }
 }

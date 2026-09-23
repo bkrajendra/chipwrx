@@ -3,6 +3,7 @@ import { DoctorScreen } from "./features/doctor/DoctorScreen";
 import { Onboarding } from "./features/onboarding/Onboarding";
 import { PrivacyNotice } from "./features/onboarding/PrivacyNotice";
 import { LauncherScreen } from "./features/launcher/LauncherScreen";
+import { ThemeToggle } from "./features/shell/ThemeToggle";
 import { Modal } from "./features/shell/Modal";
 import { Workspace } from "./features/shell/Workspace";
 import { useTheme } from "./features/shell/useTheme";
@@ -81,13 +82,16 @@ function App() {
     <main className="flex h-screen w-screen flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <header className="flex items-center justify-between border-b border-neutral-200 px-4 py-3 dark:border-neutral-800">
         <h1 className="text-sm font-semibold tracking-wide">Vibe Hardware</h1>
-        <button
-          type="button"
-          onClick={() => setDoctorOpen(true)}
-          className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
-        >
-          Doctor
-        </button>
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <button
+            type="button"
+            onClick={() => setDoctorOpen(true)}
+            className="rounded border border-neutral-300 px-2.5 py-1 text-xs font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            Doctor
+          </button>
+        </div>
       </header>
       <section className="flex-1 overflow-y-auto">
         <LauncherScreen onOpenWorkspace={setWorkspace} />
