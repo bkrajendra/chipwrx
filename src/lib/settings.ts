@@ -16,13 +16,16 @@ export function emptyPatch(): GlobalSettingsPatch {
     appearance: null,
     network: null,
     advanced: null,
+    updates: null,
     onboardingCompleted: null,
+    privacyNoticeAcknowledged: null,
   };
 }
 
 /** The object-valued top-level sections — `schemaVersion`/`lastAppVersion`/
- * `onboardingCompleted` are primitives and aren't patchable through this helper. */
-type PatchableSection = Exclude<keyof GlobalSettingsPatch, "onboardingCompleted">;
+ * `onboardingCompleted`/`privacyNoticeAcknowledged` are primitives and aren't patchable
+ * through this helper. */
+type PatchableSection = Exclude<keyof GlobalSettingsPatch, "onboardingCompleted" | "privacyNoticeAcknowledged">;
 
 /** Patches exactly one top-level section, spreading its current value under `overrides`. */
 export function patchSection<K extends PatchableSection>(

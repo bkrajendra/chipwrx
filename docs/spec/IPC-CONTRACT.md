@@ -268,7 +268,26 @@ pub enum ProcEvent {
     Defect  { proc_id: ProcId, defect: Defect },
     Size    { proc_id: ProcId, usage: SizeUsage },
     Stage   { proc_id: ProcId, stage: String },   // "Compiling", "Linking", "Writing at 0x10000"
+    /// `M9`/`FR-BUILD-10`: one per environment `pipeline_test` reports on — synthesized
+    /// from `pio test --json-output`'s single end-of-run JSON blob, the same way `Defect`
+    /// is synthesized from `pio check --json-output`'s (`SPEC.md` §8 open question 39).
+    TestResult{ proc_id: ProcId, suite: TestSuite },
     Finished{ proc_id: ProcId, success: bool, exit_code: i32, duration_ms: u64 },
+}
+
+#[derive(Clone, Serialize)] #[serde(rename_all = "camelCase")]
+pub enum TestStatus { Passed, Failed, Errored, Skipped }
+
+#[derive(Clone, Serialize)] #[serde(rename_all = "camelCase")]
+pub struct TestCaseResult {
+    pub name: String, pub status: TestStatus, pub message: Option<String>,
+    pub duration: f64, pub file: Option<String>, pub line: Option<u32>,
+}
+
+#[derive(Clone, Serialize)] #[serde(rename_all = "camelCase")]
+pub struct TestSuite {
+    pub env_name: String, pub test_name: String, pub status: TestStatus,
+    pub duration: f64, pub cases: Vec<TestCaseResult>,
 }
 
 #[derive(Clone, Serialize)] #[serde(rename_all = "camelCase")]
@@ -478,9 +497,18 @@ pub struct FileDiff { pub path: String, pub before: Option<String>, pub after: O
 | `settings_set_global` | `(patch: GlobalSettingsPatch) -> GlobalSettings` |
 | `settings_get_project` | `(workspace: WorkspaceId) -> ProjectSettings` |
 | `settings_set_project` | `(workspace: WorkspaceId, patch: ProjectSettingsPatch) -> ProjectSettings` |
+| `app_info_get` | `() -> AppInfo { version, gitSha }` (`M10`/`NFR-D3`) |
 
 Schemas in [`DATA-MODEL.md`](./DATA-MODEL.md) §3–§4. Global event `settings://changed`
 notifies all windows.
+
+`GlobalSettings` gained two `M10` sections: `updates: { checkForUpdates: bool }`
+(`NFR-D2`'s opt-out) and a top-level `privacyNoticeAcknowledged: bool` (`NFR-S2`'s
+first-run disclosure). Update checking/installing itself isn't a custom command — the
+frontend calls `@tauri-apps/plugin-updater`'s `check()`/`Update.downloadAndInstall()` and
+`@tauri-apps/plugin-process`'s `relaunch()` directly, the same way `@tauri-apps/
+plugin-dialog` is already called directly outside `ipc.ts` (rule 1 below is about hand-
+written `invoke()` calls, not about official Tauri plugin JS APIs).
 
 ---
 

@@ -13,7 +13,7 @@ export type ProcSummary = { id: ProcId, label: string, kind: ProcKind, startedAt
 
 export type PermissionDenial = { tool: string, reason: string, };
 
-export type AppError = { "code": "TOOL_MISSING", tool: string, installAction: boolean, } | { "code": "TOOL_TOO_OLD", tool: string, found: string, minimum: string, } | { "code": "CLAUDE_UNAUTHENTICATED" } | { "code": "CLAUDE_PERMISSION_DENIED", denials: Array<PermissionDenial>, } | { "code": "CLAUDE_INTERRUPTED", sessionId: string, } | { "code": "NETWORK_UNAVAILABLE", host: string, } | { "code": "PIO_COMMAND_FAILED", argv: Array<string>, exitCode: number, tail: string, } | { "code": "CLAUDE_PROCESS_FAILED", exitCode: number, tail: string, } | { "code": "BUILD_FAILED", defects: number, } | { "code": "PORT_BUSY", port: string, heldBy: string, } | { "code": "PORT_DISAPPEARED", port: string, } | { "code": "NOT_A_PIO_PROJECT", path: string, } | { "code": "INI_PARSE", path: string, line: number | null, message: string, } | { "code": "INI_CHANGED_ON_DISK", path: string, } | { "code": "WORKSPACE_UNTRUSTED", hooks: Array<string>, mcpServers: Array<string>, } | { "code": "SNAPSHOT_FAILED", message: string, } | { "code": "UPLOAD_BLOCKED", reason: string, } | { "code": "IO", message: string, };
+export type AppError = { "code": "TOOL_MISSING", tool: string, installAction: boolean, } | { "code": "TOOL_TOO_OLD", tool: string, found: string, minimum: string, } | { "code": "CLAUDE_UNAUTHENTICATED" } | { "code": "CLAUDE_PERMISSION_DENIED", denials: Array<PermissionDenial>, } | { "code": "CLAUDE_INTERRUPTED", sessionId: string, } | { "code": "NETWORK_UNAVAILABLE", host: string, } | { "code": "PIO_COMMAND_FAILED", argv: Array<string>, exitCode: number, tail: string, } | { "code": "CLAUDE_PROCESS_FAILED", exitCode: number, tail: string, } | { "code": "BUILD_FAILED", defects: number, } | { "code": "PORT_BUSY", port: string, heldBy: string, } | { "code": "PORT_DISAPPEARED", port: string, } | { "code": "NOT_A_PIO_PROJECT", path: string, } | { "code": "INI_PARSE", path: string, line: number | null, message: string, } | { "code": "INI_CHANGED_ON_DISK", path: string, } | { "code": "WORKSPACE_UNTRUSTED", hooks: Array<string>, mcpServers: Array<string>, } | { "code": "SNAPSHOT_FAILED", message: string, } | { "code": "UPLOAD_BLOCKED", reason: string, } | { "code": "IO", message: string, } | { "code": "SECRET_STORE_FAILED", message: string, };
 
 export type ProbeResult = { "status": "ok", version: string, path: string | null, detail: string | null, } | { "status": "missing", installAvailable: boolean, } | { "status": "degraded", reason: string, remediation: Remediation | null, } | { "status": "error", detail: string, } | { "status": "probing" };
 
@@ -70,6 +70,8 @@ export type AdvancedSettings = { keepProcessLogs: boolean,
  */
 allowUnrestrictedPolicy: boolean, };
 
+export type UpdateSettings = { checkForUpdates: boolean, };
+
 export type GlobalSettings = { schemaVersion: number, 
 /**
  * The app version that last wrote this file — compared at startup against the
@@ -77,15 +79,24 @@ export type GlobalSettings = { schemaVersion: number,
  * covers both a fresh install and a file written before this field existed; either
  * way, resetting is the safe default (`DATA-MODEL.md` §3).
  */
-lastAppVersion: string | null, toolchain: ToolchainSettings, claude: ClaudeSettings, pipeline: PipelineSettings, monitor: MonitorSettings, logs: LogSettings, editor: EditorSettings, appearance: AppearanceSettings, network: NetworkSettings, advanced: AdvancedSettings, 
+lastAppVersion: string | null, toolchain: ToolchainSettings, claude: ClaudeSettings, pipeline: PipelineSettings, monitor: MonitorSettings, logs: LogSettings, editor: EditorSettings, appearance: AppearanceSettings, network: NetworkSettings, advanced: AdvancedSettings, updates: UpdateSettings, 
 /**
  * `FR-SETUP-8`: "Completion state is per-machine, in `settings.json`, not
  * per-project" — the 4-step first-run onboarding is skippable and re-enterable from
  * Doctor, but only shows automatically once.
  */
-onboardingCompleted: boolean, };
+onboardingCompleted: boolean, 
+/**
+ * `NFR-S2`/`M10`: "A first-run notice states plainly that prompts, and the code
+ * Claude reads, are sent to Anthropic by the Claude CLI." Gates showing that notice —
+ * separate from `onboarding_completed` since it's a one-time disclosure, not a
+ * skippable-and-re-enterable wizard like onboarding is.
+ */
+privacyNoticeAcknowledged: boolean, };
 
-export type GlobalSettingsPatch = { toolchain: ToolchainSettings | null, claude: ClaudeSettings | null, pipeline: PipelineSettings | null, monitor: MonitorSettings | null, logs: LogSettings | null, editor: EditorSettings | null, appearance: AppearanceSettings | null, network: NetworkSettings | null, advanced: AdvancedSettings | null, onboardingCompleted: boolean | null, };
+export type GlobalSettingsPatch = { toolchain: ToolchainSettings | null, claude: ClaudeSettings | null, pipeline: PipelineSettings | null, monitor: MonitorSettings | null, logs: LogSettings | null, editor: EditorSettings | null, appearance: AppearanceSettings | null, network: NetworkSettings | null, advanced: AdvancedSettings | null, updates: UpdateSettings | null, onboardingCompleted: boolean | null, privacyNoticeAcknowledged: boolean | null, };
+
+export type AppInfo = { version: string, gitSha: string, };
 
 export type Severity = "error" | "warning" | "note";
 
@@ -95,7 +106,17 @@ export type Defect = { file: string, line: number, column: number | null, severi
 
 export type SizeUsage = { ramUsed: number, ramTotal: number, flashUsed: number, flashTotal: number, ramDelta: number | null, flashDelta: number | null, };
 
-export type ProcEvent = { "type": "started", "data": { procId: ProcId, label: string, argv: Array<string>, } } | { "type": "lines", "data": { procId: ProcId, lines: Array<LogLine>, } } | { "type": "defect", "data": { procId: ProcId, defect: Defect, } } | { "type": "size", "data": { procId: ProcId, usage: SizeUsage, } } | { "type": "stage", "data": { procId: ProcId, stage: string, } } | { "type": "finished", "data": { procId: ProcId, success: boolean, exitCode: number, durationMs: number, } };
+export type TestStatus = "passed" | "failed" | "errored" | "skipped";
+
+export type TestCaseResult = { name: string, status: TestStatus, 
+/**
+ * The assertion failure text, or the build/run exception — whichever `pio test` gave.
+ */
+message: string | null, duration: number, file: string | null, line: number | null, };
+
+export type TestSuite = { envName: string, testName: string, status: TestStatus, duration: number, cases: Array<TestCaseResult>, };
+
+export type ProcEvent = { "type": "started", "data": { procId: ProcId, label: string, argv: Array<string>, } } | { "type": "lines", "data": { procId: ProcId, lines: Array<LogLine>, } } | { "type": "defect", "data": { procId: ProcId, defect: Defect, } } | { "type": "size", "data": { procId: ProcId, usage: SizeUsage, } } | { "type": "testResult", "data": { procId: ProcId, suite: TestSuite, } } | { "type": "stage", "data": { procId: ProcId, stage: string, } } | { "type": "finished", "data": { procId: ProcId, success: boolean, exitCode: number, durationMs: number, } };
 
 export type BoardSource = "registry" | "installed";
 

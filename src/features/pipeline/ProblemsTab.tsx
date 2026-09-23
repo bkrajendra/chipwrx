@@ -23,25 +23,40 @@ export function ProblemsTab({
   lines,
   running,
   onAskClaudeToFix,
+  onRunCheck,
+  checking,
 }: {
   defects: Defect[];
   lines: LogLineView[];
   running: boolean;
   onAskClaudeToFix: (prompt: string) => void;
+  onRunCheck: () => void;
+  checking: boolean;
 }) {
   const errorCount = defects.filter((d) => d.severity === "error").length;
 
   return (
     <div className="h-full overflow-y-auto px-4 py-2">
-      {!running && errorCount > 0 && (
+      <div className="mb-2 flex items-center gap-2">
+        {!running && errorCount > 0 && (
+          <button
+            type="button"
+            onClick={() => onAskClaudeToFix(composeFixPrompt(defects, lines))}
+            className="rounded bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+          >
+            Ask Claude to fix these {errorCount} error{errorCount === 1 ? "" : "s"}
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => onAskClaudeToFix(composeFixPrompt(defects, lines))}
-          className="mb-2 rounded bg-red-600 px-2.5 py-1.5 text-xs font-medium text-white hover:bg-red-700"
+          onClick={onRunCheck}
+          disabled={checking}
+          title="pio check --json-output"
+          className="rounded border border-neutral-300 px-2.5 py-1.5 text-xs font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
         >
-          Ask Claude to fix these {errorCount} error{errorCount === 1 ? "" : "s"}
+          {checking ? "Running static analysis…" : "Run static analysis"}
         </button>
-      )}
+      </div>
       {defects.length === 0 && <p className="text-xs text-neutral-500 dark:text-neutral-400">No problems.</p>}
       {defects.map((d, i) => (
         <div key={i} className="border-b border-neutral-100 py-1.5 text-xs last:border-0 dark:border-neutral-900">
@@ -49,6 +64,11 @@ export function ProblemsTab({
             [{SEVERITY_LABEL[d.severity]}] {d.file}:{d.line}
             {d.column ? `:${d.column}` : ""}
           </span>
+          {d.source === "check" && (
+            <span className="ml-1.5 rounded bg-neutral-100 px-1 py-0.5 text-[10px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+              check
+            </span>
+          )}
           <span className="ml-1.5 text-neutral-700 dark:text-neutral-300">{d.message}</span>
         </div>
       ))}

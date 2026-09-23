@@ -12,7 +12,8 @@ use crate::error::{AppError, Result};
 use line_splitter::LineSplitter;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::io::Write;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -127,14 +128,49 @@ struct ProcEntry {
     exited_rx: watch::Receiver<bool>,
 }
 
-#[derive(Default)]
+/// `M9`/`NFR-R2`: one entry per currently-tracked child, persisted alongside the in-memory
+/// `table` so a *future* launch of this app can tell whether the *previous* one left
+/// orphans behind (it does, if that run was `SIGKILL`ed — a signal this process can't catch
+/// to clean up after itself). Never holds more than `table` does; written on every
+/// insert/remove.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RegisteredProc {
+    pub pid: u32,
+    pub label: String,
+}
+
+#[derive(Default, Clone)]
 pub struct ProcessSupervisor {
     table: Arc<Mutex<HashMap<ProcId, ProcEntry>>>,
+    /// `None` until `set_registry_path` is called (tests, and any use before the app's
+    /// cache dir is resolved) — persistence is simply skipped while unset.
+    registry_path: Arc<Mutex<Option<PathBuf>>>,
 }
 
 impl ProcessSupervisor {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// `M9`: wires up the on-disk orphan registry — call once, early (`lib.rs`'s `setup()`,
+    /// after resolving the app cache dir and after `reap_orphans_from_previous_run` has
+    /// already read and cleared whatever the previous run left there).
+    pub fn set_registry_path(&self, path: PathBuf) {
+        *self.registry_path.lock().unwrap() = Some(path);
+        self.persist_registry();
+    }
+
+    fn persist_registry(&self) {
+        let path = self.registry_path.lock().unwrap().clone();
+        let Some(path) = path else { return };
+        let entries: Vec<RegisteredProc> = self
+            .table
+            .lock()
+            .unwrap()
+            .values()
+            .filter_map(|e| e.pid.map(|pid| RegisteredProc { pid, label: e.label.clone() }))
+            .collect();
+        let _ = write_registry_atomic(&path, &entries);
     }
 
     pub async fn spawn_streaming(&self, spec: SpawnSpec, sink: LineSink) -> Result<Handle> {
@@ -172,16 +208,18 @@ impl ProcessSupervisor {
                 exited_rx,
             },
         );
+        self.persist_registry();
 
         let (exit_code_tx, exit_code_rx) = tokio::sync::oneshot::channel();
-        let table = self.table.clone();
+        let supervisor = self.clone();
         let reap_id = id.clone();
         tokio::spawn(async move {
             let status = child.wait().await;
             let code = status.ok().and_then(|s| s.code()).unwrap_or(-1);
             let _ = exit_code_tx.send(code);
             let _ = exited_tx.send(true);
-            table.lock().unwrap().remove(&reap_id);
+            supervisor.table.lock().unwrap().remove(&reap_id);
+            supervisor.persist_registry();
         });
 
         Ok(Handle {
@@ -254,11 +292,21 @@ impl ProcessSupervisor {
     }
 
     /// Best-effort synchronous kill of every tracked process. Safe to call from `Drop` and
-    /// from the Tauri `RunEvent::Exit` hook — does not wait for exit confirmation.
+    /// from the Tauri `RunEvent::Exit` hook — does not wait for exit confirmation. Also
+    /// clears the on-disk orphan registry synchronously (`M9`) rather than relying on each
+    /// process's own async reaper task to do it, since those may not get to run before the
+    /// app actually exits right after this returns — a clean exit means "no orphans by
+    /// definition," so the next launch shouldn't find a stale registry and reap-kill
+    /// something that already exited cleanly (or, worse, a *different* process that has
+    /// since reused the same pid).
     pub fn kill_all(&self) {
         let table = self.table.lock().unwrap();
         for entry in table.values() {
             let _ = entry.killer.terminate();
+        }
+        drop(table);
+        if let Some(path) = self.registry_path.lock().unwrap().clone() {
+            let _ = write_registry_atomic(&path, &[]);
         }
     }
 
@@ -312,7 +360,13 @@ impl ProcessSupervisor {
 
 impl Drop for ProcessSupervisor {
     fn drop(&mut self) {
-        self.kill_all();
+        // `M9`: now `Clone` (each spawn's reaper task holds its own handle so it can
+        // persist the registry after removing its own entry — see `spawn_streaming`), so an
+        // ordinary reaper-task drop must not kill every *other* tracked process. Only the
+        // very last live handle's drop should actually tear anything down.
+        if Arc::strong_count(&self.table) == 1 {
+            self.kill_all();
+        }
     }
 }
 
@@ -357,6 +411,59 @@ fn epoch_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
+}
+
+/// Atomic write: temp file in the same directory, `fsync`, rename (`NFR-R3`) — same
+/// pattern as every other persisted store in this app (`core::settings::save` etc.).
+fn write_registry_atomic(path: &Path, entries: &[RegisteredProc]) -> std::io::Result<()> {
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    let json = serde_json::to_vec(entries)?;
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(&json)?;
+        f.sync_all()?;
+    }
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
+/// `M9`/`NFR-R2`: "killing the app with `SIGKILL` mid-build leaves no orphaned processes on
+/// next launch." `SIGKILL` (Unix) or an equivalent forced termination gives this process no
+/// chance to run `kill_all()` itself, and Unix has no automatic process-group death when a
+/// parent dies uncleanly (Windows' Job Object `KILL_ON_JOB_CLOSE` already handles that case
+/// on its own — see `core::proc::windows` — so this is belt-and-suspenders there, but the
+/// only real protection on Unix). Call once at startup, before spawning anything new in
+/// this session: reads whatever registry the *previous* run left behind — non-empty only if
+/// that run never reached `kill_all()` — force-kills any of those pids still alive, and
+/// clears the file for this session. Returns the labels of whatever was actually reaped, for
+/// logging.
+pub fn reap_orphans_from_previous_run(path: &Path) -> Vec<String> {
+    let entries: Vec<RegisteredProc> = match std::fs::read(path) {
+        Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_default(),
+        Err(_) => Vec::new(),
+    };
+
+    let reaped: Vec<String> = entries
+        .iter()
+        .filter(|e| kill_if_alive(e.pid))
+        .map(|e| e.label.clone())
+        .collect();
+
+    let _ = write_registry_atomic(path, &[]);
+    reaped
+}
+
+#[cfg(unix)]
+fn kill_if_alive(pid: u32) -> bool {
+    unix::kill_if_alive(pid)
+}
+
+#[cfg(windows)]
+fn kill_if_alive(pid: u32) -> bool {
+    windows::kill_if_alive(pid)
 }
 
 fn spawn_err(spec: &SpawnSpec) -> impl Fn(std::io::Error) -> AppError + '_ {

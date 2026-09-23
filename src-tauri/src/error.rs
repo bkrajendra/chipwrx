@@ -94,6 +94,12 @@ pub enum AppError {
     Io {
         message: String,
     },
+    /// `NFR-S1`: the optional `ANTHROPIC_API_KEY` in the OS keychain — `message` is
+    /// `keyring::Error`'s own text (platform-specific, e.g. "no keychain access"), never
+    /// the key value itself.
+    SecretStoreFailed {
+        message: String,
+    },
 }
 
 impl std::fmt::Display for AppError {

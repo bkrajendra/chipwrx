@@ -318,7 +318,7 @@ pub async fn diagnostics_export(
         active_platformio_ini: None, // no workspace concept until M2
         last_build_log: None,        // no build pipeline until M5
         app_version: &app_version,
-        git_sha: None,
+        git_sha: Some(env!("VIBE_GIT_SHA")),
         redact_serials: false,
     };
 

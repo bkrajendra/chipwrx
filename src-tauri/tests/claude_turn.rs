@@ -60,6 +60,7 @@ async fn full_transcript_streams_events_in_order_and_ends_with_a_result() {
             policy: PermissionPolicySetting::Guarded,
             model: "sonnet",
             permission_prompts_none_supported: true,
+            env: vec![],
         },
         tx,
     )
@@ -130,6 +131,7 @@ async fn stop_mid_stream_terminates_the_process_and_reports_failure_not_a_result
             policy: PermissionPolicySetting::Guarded,
             model: "sonnet",
             permission_prompts_none_supported: true,
+            env: vec![],
         },
         tx,
     )
@@ -182,6 +184,7 @@ async fn guarded_policy_permission_denial_surfaces_as_a_permission_denied_event(
             policy: PermissionPolicySetting::Guarded,
             model: "sonnet",
             permission_prompts_none_supported: true,
+            env: vec![],
         },
         tx,
     )

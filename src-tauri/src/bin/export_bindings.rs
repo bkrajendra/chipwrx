@@ -12,6 +12,7 @@
 use std::fs;
 use std::path::PathBuf;
 use ts_rs::{Config, TS};
+use vibe_hardware_lib::commands::app_info::AppInfo;
 use vibe_hardware_lib::commands::doctor::ToolchainTool;
 use vibe_hardware_lib::commands::settings::GlobalSettingsPatch;
 use vibe_hardware_lib::core::claude::ids::{SessionId, TurnId};
@@ -32,7 +33,9 @@ use vibe_hardware_lib::core::pio::init::CreateProjectRequest;
 use vibe_hardware_lib::core::pio::packages::{InstalledPackage, OutdatedPackage, PkgKind};
 use vibe_hardware_lib::core::pio::pipeline::{PipelineState, PipelineStep};
 use vibe_hardware_lib::core::pio::registry::{PackagePage, RegistryPackage};
-use vibe_hardware_lib::core::proc::events::{Defect, DefectSource, ProcEvent, Severity, SizeUsage};
+use vibe_hardware_lib::core::proc::events::{
+    Defect, DefectSource, ProcEvent, Severity, SizeUsage, TestCaseResult, TestStatus, TestSuite,
+};
 use vibe_hardware_lib::core::proc::{LogLine, ProcId, ProcKind, ProcSummary, StdStream};
 use vibe_hardware_lib::core::project::templates::IniTemplate;
 use vibe_hardware_lib::core::project::types::{
@@ -42,7 +45,7 @@ use vibe_hardware_lib::core::project::types::{
 use vibe_hardware_lib::core::settings::{
     AdvancedSettings, AppearanceSettings, ClaudeSettings, EditorSettings, GlobalSettings, LogSettings,
     MonitorSettings, NetworkSettings, PermissionPolicySetting, PipelinePolicySetting, PipelineSettings,
-    ThemeSetting, ToolchainSettings,
+    ThemeSetting, ToolchainSettings, UpdateSettings,
 };
 use vibe_hardware_lib::core::snapshot::types::{ChangeStatus, FileChange, FileDiff, SnapshotId};
 use vibe_hardware_lib::core::toolchain::install::{InstallEvent, InstallPlan};
@@ -96,8 +99,10 @@ fn main() {
     emit!(AppearanceSettings);
     emit!(NetworkSettings);
     emit!(AdvancedSettings);
+    emit!(UpdateSettings);
     emit!(GlobalSettings);
     emit!(GlobalSettingsPatch);
+    emit!(AppInfo);
 
     // Pipeline events, shared by project_create (M2) and the build pipeline (M5)
     // (IPC-CONTRACT.md §5)
@@ -105,6 +110,9 @@ fn main() {
     emit!(DefectSource);
     emit!(Defect);
     emit!(SizeUsage);
+    emit!(TestStatus);
+    emit!(TestCaseResult);
+    emit!(TestSuite);
     emit!(ProcEvent);
 
     // Projects (IPC-CONTRACT.md §3)

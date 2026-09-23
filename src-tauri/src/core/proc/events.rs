@@ -51,6 +51,41 @@ pub struct SizeUsage {
     pub flash_delta: Option<i64>,
 }
 
+/// `M9`/`FR-BUILD-10`: statuses `pio test --json-output` actually emits (verified against a
+/// real run — `tests/fixtures/pio-test-json-real.json` — for `ERRORED`; `PASSED`/`FAILED`/
+/// `SKIPPED` are PlatformIO's own well-known other values for the same field, not
+/// independently captured here).
+#[derive(Debug, Clone, Copy, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub enum TestStatus {
+    Passed,
+    Failed,
+    Errored,
+    Skipped,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TestCaseResult {
+    pub name: String,
+    pub status: TestStatus,
+    /// The assertion failure text, or the build/run exception — whichever `pio test` gave.
+    pub message: Option<String>,
+    pub duration: f64,
+    pub file: Option<String>,
+    pub line: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct TestSuite {
+    pub env_name: String,
+    pub test_name: String,
+    pub status: TestStatus,
+    pub duration: f64,
+    pub cases: Vec<TestCaseResult>,
+}
+
 #[derive(Debug, Clone, Serialize, TS)]
 #[serde(rename_all = "camelCase", rename_all_fields = "camelCase", tag = "type", content = "data")]
 pub enum ProcEvent {
@@ -72,6 +107,16 @@ pub enum ProcEvent {
     Size {
         proc_id: ProcId,
         usage: SizeUsage,
+    },
+    /// `M9`/`FR-BUILD-10`: one per environment `pio test --json-output` reports on —
+    /// synthesized from the single JSON blob it prints at the end of the run, the same way
+    /// `Defect` events are synthesized from `pio check --json-output`'s. Not in
+    /// `IPC-CONTRACT.md`'s original `ProcEvent` sketch (`SPEC.md` §8 open question 39): that
+    /// sketch predates M9 and has no variant carrying a structured pass/fail list, which
+    /// `FR-BUILD-10` requires — this is an additive extension, not a divergence.
+    TestResult {
+        proc_id: ProcId,
+        suite: TestSuite,
     },
     Stage {
         proc_id: ProcId,

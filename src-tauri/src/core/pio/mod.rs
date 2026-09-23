@@ -1,5 +1,6 @@
 pub mod boards;
 pub mod build_history;
+pub mod check;
 pub mod global_settings;
 pub mod init;
 pub mod packages;
@@ -7,4 +8,5 @@ pub mod pipeline;
 pub mod registry;
 pub mod run;
 pub mod targets;
+pub mod test;
 pub mod watch;

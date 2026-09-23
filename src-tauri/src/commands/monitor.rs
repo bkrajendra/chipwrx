@@ -43,15 +43,16 @@ impl MonitorState {
     }
 
     /// `FR-DEV-4`: "If Upload is pressed while the monitor holds the port, the broker (a)
-    /// stops the monitor... and the UI narrates each step." If a monitor is running for
-    /// `workspace`, signals it to stop (which also drops its `Lease`, freeing the port) and
-    /// returns the channel it was streaming events on, so the caller can restart it
-    /// identically afterward and keep narrating on the same channel the frontend is
-    /// already listening to.
-    pub(crate) async fn preempt_for_upload(&self, workspace: &str) -> Option<Channel<MonitorEvent>> {
+    /// stops the monitor... and the UI narrates each step." Same applies to `pio test`
+    /// (`M9`, `CLI-CONTRACT.md` §5.3) — `by` names whichever one is preempting, for the
+    /// narration. If a monitor is running for `workspace`, signals it to stop (which also
+    /// drops its `Lease`, freeing the port) and returns the channel it was streaming events
+    /// on, so the caller can restart it identically afterward and keep narrating on the
+    /// same channel the frontend is already listening to.
+    pub(crate) async fn preempt(&self, workspace: &str, by: &str) -> Option<Channel<MonitorEvent>> {
         let mut sessions = self.0.lock().await;
         let session = sessions.remove(workspace)?;
-        let _ = session.on_event.send(MonitorEvent::Preempted { by: "Upload".into() });
+        let _ = session.on_event.send(MonitorEvent::Preempted { by: by.into() });
         let _ = session.cmd_tx.send(monitor::MonitorCommand::Stop);
         Some(session.on_event)
     }

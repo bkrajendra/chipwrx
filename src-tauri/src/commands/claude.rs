@@ -132,6 +132,16 @@ pub async fn claude_send_turn(
         run_blocking(move || snapshot_engine::snapshot(&snap_dir, &label)).await?
     };
 
+    // `NFR-S1`: inject the optional keychain-stored `ANTHROPIC_API_KEY` into this child's
+    // environment only — never written to argv, never persisted outside the OS keychain.
+    // A keychain read failure (e.g. no keychain access in this environment) degrades to "no
+    // key" rather than failing the turn outright; the CLI falls back to subscription auth.
+    let api_key_env = run_blocking(crate::core::secrets::get_anthropic_api_key)
+        .await
+        .unwrap_or(None)
+        .map(|key| vec![("ANTHROPIC_API_KEY".to_string(), key)])
+        .unwrap_or_default();
+
     let (event_tx, mut event_rx) = tokio::sync::mpsc::unbounded_channel();
     let proc_id = turn::run_turn(
         &supervisor,
@@ -144,6 +154,7 @@ pub async fn claude_send_turn(
             policy,
             model: &model,
             permission_prompts_none_supported: permission_prompts_none,
+            env: api_key_env,
         },
         event_tx,
     )

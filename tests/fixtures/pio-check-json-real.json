@@ -1,0 +1,1 @@
+[{"env": "esp32-c6-devkitm-1", "tool": "cppcheck", "duration": 8.404210567474365, "defects": [], "succeeded": false, "stats": {}}]

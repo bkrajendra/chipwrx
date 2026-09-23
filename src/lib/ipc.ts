@@ -3,6 +3,7 @@
 
 import { invoke, Channel } from "@tauri-apps/api/core";
 import type {
+  AppInfo,
   BoardBrief,
   ChatEvent,
   CreateProjectRequest,
@@ -35,6 +36,12 @@ import type {
   TurnRecord,
   TurnRequest,
 } from "./bindings";
+
+/** `NFR-D3`: app version + git SHA, for the About screen (the diagnostics bundle gets the
+ * same two values server-side, via `core::toolchain::diagnostics`). */
+export function appInfoGet(): Promise<AppInfo> {
+  return invoke("app_info_get");
+}
 
 export function doctorRun(force: boolean): Promise<DoctorReport> {
   return invoke("doctor_run", { force });
@@ -71,6 +78,19 @@ export function settingsGetGlobal(): Promise<GlobalSettings> {
 
 export function settingsSetGlobal(patch: GlobalSettingsPatch): Promise<GlobalSettings> {
   return invoke("settings_set_global", { patch });
+}
+
+/** `NFR-S1`: whether an `ANTHROPIC_API_KEY` is set in the OS keychain — never the value. */
+export function secretsHasApiKey(): Promise<boolean> {
+  return invoke("secrets_has_api_key");
+}
+
+export function secretsSetApiKey(key: string): Promise<void> {
+  return invoke("secrets_set_api_key", { key });
+}
+
+export function secretsClearApiKey(): Promise<void> {
+  return invoke("secrets_clear_api_key");
 }
 
 export function boardsList(refresh: boolean, installedOnly: boolean): Promise<BoardBrief[]> {
@@ -192,6 +212,18 @@ export function pipelineRunTarget(workspace: string, target: string, onEvent: (e
   const channel = new Channel<ProcEvent>();
   channel.onmessage = onEvent;
   return invoke("pipeline_run_target", { workspace, target, onEvent: channel });
+}
+
+export function pipelineCheck(workspace: string, onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pipeline_check", { workspace, onEvent: channel });
+}
+
+export function pipelineTest(workspace: string, onEvent: (event: ProcEvent) => void): Promise<string> {
+  const channel = new Channel<ProcEvent>();
+  channel.onmessage = onEvent;
+  return invoke("pipeline_test", { workspace, onEvent: channel });
 }
 
 export function pipelineStop(procId: string): Promise<void> {

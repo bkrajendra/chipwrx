@@ -23,11 +23,45 @@ use tokio::sync::Mutex;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // `M9`/`NFR-R2`: "every spawned child is registered in a process table and killed on
+    // app exit and on panic." `RunEvent::Exit` (below) covers a normal exit; a panic
+    // anywhere in the app needs its own hook, since nothing else runs after one unwinds off
+    // the last frame (or, with this crate's release-profile `panic = "abort"`, before the
+    // abort — panic hooks still run either way). Chains the previous hook (rather than
+    // replacing it) so `tauri_plugin_log`'s own panic logging, if any is installed later,
+    // still happens.
+    let supervisor = ProcessSupervisor::new();
+    let supervisor_for_panic = supervisor.clone();
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        supervisor_for_panic.kill_all();
+        previous_hook(info);
+    }));
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_log::Builder::new().build())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                // `NFR-R1`/`M9`: "the redaction filter runs before anything hits disk or
+                // the UI" (`core::redact`'s own doc comment already promised this for M9).
+                // Mirrors `tauri_plugin_log`'s own default format (`Builder::default`) —
+                // this only exists to redact `message` first.
+                .format(|out, message, record| {
+                    let redacted = crate::core::redact::redact(&message.to_string(), false);
+                    out.finish(format_args!(
+                        "{}[{}][{}] {}",
+                        chrono::Local::now().format("[%Y-%m-%d][%H:%M:%S]"),
+                        record.target(),
+                        record.level(),
+                        redacted
+                    ))
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_dialog::init())
-        .manage(ProcessSupervisor::new())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
+        .manage(supervisor)
         .manage(DoctorState(Mutex::new(DoctorCache::new())))
         .manage(HttpClientState(reqwest::Client::new()))
         .manage(ActiveTurnsState(Mutex::new(HashMap::new())))
@@ -57,9 +91,26 @@ pub fn run() {
                 ProjectRegistry::default()
             });
             app.manage(ProjectRegistryState(Mutex::new(registry)));
+
+            // `M9`/`NFR-R2`: reap whatever the *previous* run's process registry still
+            // lists (non-empty only if that run was killed before it reached
+            // `RunEvent::Exit`'s `kill_all()`) before this session starts tracking its own
+            // processes in the same file.
+            match commands::util::cache_dir(app.handle()) {
+                Ok(cache_dir) => {
+                    let registry_path = cache_dir.join("running-procs.json");
+                    for label in core::proc::reap_orphans_from_previous_run(&registry_path) {
+                        tracing::warn!("reaped an orphaned process left by a previous run: {label}");
+                    }
+                    app.state::<ProcessSupervisor>().set_registry_path(registry_path);
+                }
+                Err(e) => tracing::warn!("failed to resolve cache dir; orphan reaping disabled this session: {e}"),
+            }
+
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            commands::app_info::app_info_get,
             commands::doctor::doctor_run,
             commands::doctor::doctor_get_cached,
             commands::doctor::toolchain_install,
@@ -68,6 +119,9 @@ pub fn run() {
             commands::doctor::diagnostics_export,
             commands::settings::settings_get_global,
             commands::settings::settings_set_global,
+            commands::secrets::secrets_has_api_key,
+            commands::secrets::secrets_set_api_key,
+            commands::secrets::secrets_clear_api_key,
             commands::project::boards_list,
             commands::project::project_create,
             commands::project::project_cancel_create,
@@ -95,6 +149,8 @@ pub fn run() {
             commands::pipeline::pipeline_build,
             commands::pipeline::pipeline_upload,
             commands::pipeline::pipeline_run_target,
+            commands::pipeline::pipeline_check,
+            commands::pipeline::pipeline_test,
             commands::pipeline::pipeline_stop,
             commands::pipeline::pipeline_targets,
             commands::pipeline::pipeline_state,

@@ -105,10 +105,21 @@ pub fn load_cached(cache_dir: &Path, env: &str) -> Option<Vec<TargetInfo>> {
     serde_json::from_slice(&bytes).ok()
 }
 
+/// Atomic write: temp file in the same directory, `fsync`, rename (`NFR-R3`, `DATA-MODEL.md`
+/// principle "all writes are atomic" — no exception carved out for caches).
 pub fn save_cache(cache_dir: &Path, env: &str, targets: &[TargetInfo]) -> std::io::Result<()> {
     let path = cache_path(cache_dir, env);
-    std::fs::create_dir_all(path.parent().expect("pio-targets cache path always has a parent"))?;
-    std::fs::write(path, serde_json::to_vec(targets)?)
+    let dir = path.parent().expect("pio-targets cache path always has a parent");
+    std::fs::create_dir_all(dir)?;
+    let tmp = dir.join(format!("{}.tmp-{}", path.file_name().unwrap().to_string_lossy(), std::process::id()));
+    let json = serde_json::to_vec(targets)?;
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        use std::io::Write;
+        f.write_all(&json)?;
+        f.sync_all()?;
+    }
+    std::fs::rename(&tmp, &path)
 }
 
 #[cfg(test)]

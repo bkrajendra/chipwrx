@@ -731,3 +731,73 @@ Requirements are numbered `FR-<area>-<n>` and referenced from `ROADMAP.md`.
     Neither `SPEC.md` nor `CLI-CONTRACT.md` specifies a limit; none was invented. Revisit if
     a large attachment turns out to cause real problems (slow copies, a bloated `.vibe/`,
     or a prompt that blows past context).
+39. `IPC-CONTRACT.md` §5's `ProcEvent` sketch predates M9 and has no variant carrying a
+    structured pass/fail list, which `FR-BUILD-10` ("rendered as a pass/fail list") needs.
+    M9 adds `ProcEvent::TestResult { proc_id, suite: TestSuite }`, synthesized once per
+    environment from `pio test --json-output`'s single end-of-run JSON blob — the same
+    pattern `Defect` already used for `pio check --json-output`. `TestSuite`'s shape is
+    grounded against a real captured run (`tests/fixtures/pio-test-json-real.json`, a
+    project with no actual tests — status `ERRORED`) plus a hand-built fixture
+    (`pio-test-json-mixed.json`) exercising `PASSED`/`FAILED`/`SKIPPED`, which PlatformIO
+    documents as the same enum's other values but which weren't independently captured.
+    `pipeline_test` preempts a running monitor exactly as `pipeline_upload` does
+    (`commands::monitor::MonitorState::preempt`, generalized from `..._for_upload` to take a
+    `by: &str` label so both call sites narrate correctly) — `CLI-CONTRACT.md` §5.3 notes
+    `pio test` uploads and runs over the serial port too. It does not additionally take a
+    formal `PortBroker` lease of its own, matching `pipeline_upload`'s existing behavior
+    (open question 22): only `Monitor`/`Telemetry` currently register as tracked holders.
+40. `M9`'s orphan-reaping-on-next-launch (`core::proc::reap_orphans_from_previous_run`,
+    `NFR-R2`'s "no orphaned `pio`/compiler processes") force-kills whatever raw pids the
+    previous run's on-disk registry lists, with no generation/start-time check — if the OS
+    has recycled one of those pids for an unrelated process by the time this runs (narrow
+    window: only between that crash and this launch), and that process happens to be owned
+    by the same user, it gets killed too. Neither `SPEC.md` nor `ARCHITECTURE.md` specifies
+    a stronger check; `ProcSummary`/`RegisteredProc` don't currently carry the OS's own
+    process-start-time (`GetProcessTimes` / `/proc/<pid>/stat`'s `starttime`) to compare
+    against, which would close this. Revisit if this turns out to matter in practice.
+41. `pio check --json-output`'s per-defect `severity` is PlatformIO's own `low`/`medium`/
+    `high` (cppcheck's `check_severity` choices), which doesn't line up with this app's
+    `Severity::{Error,Warning,Note}` used for compiler/linker defects. `core::pio::check`
+    maps `high→Error, medium→Warning, low→Note` — a judgment call (matches how most linters
+    treat blocking/advisory/informational), not verified against any spec text. Revisit if
+    user feedback says static-analysis severity should read differently from compiler
+    severity in the Problems list.
+42. `DATA-MODEL.md` §12's "`schemaVersion` higher than current: load read-only" is only
+    half-implemented: `core::settings::load` now detects it (`LoadOutcome::NewerSchema`) and
+    guarantees the file itself is never rewritten (no data loss from an older build opening
+    a newer file), but nothing yet stops `settings_set_global` from writing to it for the
+    rest of that session, and there's no UI banner. No other persisted store
+    (`projects.json`, `.vibe/project.json`, `builds.json`, ...) has schema-version
+    comparison wired up at all yet — only `settings.json`, the one this milestone's
+    acceptance criteria specifically exercise. Revisit if a real schema bump ever ships and
+    this matters in practice.
+43. `NFR-D1`'s signing/notarization (macOS Developer ID + notarization, Windows
+    Authenticode) is wired into `.github/workflows/release.yml` following the documented
+    `tauri-action`/Apple env-var and PFX-import conventions, but **unverified** — this
+    development environment has no macOS machine and no real code-signing certificate for
+    either platform. Without the corresponding secrets configured, both steps are
+    no-ops and the workflow still produces working, unsigned installers. Before a real
+    release ships, confirm the macOS leg against an actual Apple Developer ID (notarization
+    specifically — signing alone isn't enough for Gatekeeper) and the Windows leg against a
+    real Authenticode certificate.
+44. `NFR-D2`'s updater endpoint is the static `latest.json` GitHub attaches to a release
+    (`https://github.com/<owner>/<repo>/releases/latest/download/latest.json`), not a
+    dedicated update server — the simplest option that needs no infrastructure beyond what
+    `release.yml` already produces, and the standard pattern `tauri-action` documents.
+    Revisit if update rollout ever needs staged/percentage rollouts, which a static file
+    per release can't express. The signing keypair
+    (`src-tauri/updater.key`/`updater.key.pub`) was generated once for this repo; the
+    private half is gitignored and never committed — a real release needs it (and its
+    password) stored as CI secrets, not the throwaway dev password used to create it.
+45. `release.yml` opens each tagged build as a **draft** GitHub Release rather than
+    publishing it immediately — a judgment call favoring a manual review-and-publish step
+    (attachments, release notes) over full automation, since `NFR-D1..D3` don't say either
+    way. `pages.yml` only re-renders the download page on `release: published`, so a draft
+    has no user-visible effect until someone publishes it. Revisit if the team wants tags to
+    go live unattended.
+46. `NFR-S2`'s first-run privacy notice is implemented as its own gate in `App.tsx`
+    (`privacyNoticeAcknowledged`), shown before the 4-step onboarding rather than as a 5th
+    onboarding step — `TOOLCHAIN-SETUP.md` §9 fixes onboarding at exactly four
+    (skippable/re-enterable) steps, and this disclosure is neither: it's a one-time,
+    non-skippable acknowledgement. It is not re-enterable from Doctor the way onboarding is;
+    revisit if the product wants a way to review it again later (e.g. an "About" link).

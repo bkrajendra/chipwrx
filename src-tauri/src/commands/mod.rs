@@ -1,3 +1,4 @@
+pub mod app_info;
 pub mod changes;
 pub mod claude;
 pub mod device;
@@ -7,5 +8,6 @@ pub mod monitor;
 pub mod packages;
 pub mod pipeline;
 pub mod project;
+pub mod secrets;
 pub mod settings;
 pub mod util;

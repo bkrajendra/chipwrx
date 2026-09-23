@@ -198,6 +198,22 @@ impl Default for AdvancedSettings {
     }
 }
 
+/// `NFR-D2`: "Tauri updater with a signed update manifest; update checks are opt-out" —
+/// on by default, one toggle to turn off. Manually clicking "Check for updates" in Global
+/// Settings always works regardless of this flag; it only gates the automatic
+/// startup/background check.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateSettings {
+    pub check_for_updates: bool,
+}
+
+impl Default for UpdateSettings {
+    fn default() -> Self {
+        Self { check_for_updates: true }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GlobalSettings {
@@ -226,11 +242,19 @@ pub struct GlobalSettings {
     pub network: NetworkSettings,
     #[serde(default)]
     pub advanced: AdvancedSettings,
+    #[serde(default)]
+    pub updates: UpdateSettings,
     /// `FR-SETUP-8`: "Completion state is per-machine, in `settings.json`, not
     /// per-project" — the 4-step first-run onboarding is skippable and re-enterable from
     /// Doctor, but only shows automatically once.
     #[serde(default)]
     pub onboarding_completed: bool,
+    /// `NFR-S2`/`M10`: "A first-run notice states plainly that prompts, and the code
+    /// Claude reads, are sent to Anthropic by the Claude CLI." Gates showing that notice —
+    /// separate from `onboarding_completed` since it's a one-time disclosure, not a
+    /// skippable-and-re-enterable wizard like onboarding is.
+    #[serde(default)]
+    pub privacy_notice_acknowledged: bool,
 }
 
 impl Default for GlobalSettings {
@@ -247,7 +271,9 @@ impl Default for GlobalSettings {
             appearance: AppearanceSettings::default(),
             network: NetworkSettings::default(),
             advanced: AdvancedSettings::default(),
+            updates: UpdateSettings::default(),
             onboarding_completed: false,
+            privacy_notice_acknowledged: false,
         }
     }
 }
@@ -258,6 +284,20 @@ pub enum LoadOutcome {
     Loaded,
     Created,
     RecoveredFromCorruption { corrupt_backup: PathBuf },
+    /// `DATA-MODEL.md` §12: "`schemaVersion` lower than current: migrate in memory,
+    /// re-write atomically, log the migration" — `from_version` is what the file had before
+    /// this load bumped it to `CURRENT_SCHEMA_VERSION` and re-saved. Migration itself is
+    /// just the field-level `#[serde(default)]`s on every section already doing their job;
+    /// this variant exists to mark that it happened and get logged (`M9`).
+    Migrated { from_version: u32 },
+    /// `DATA-MODEL.md` §12: "`schemaVersion` higher than current: load read-only; banner:
+    /// 'This project was used with a newer version...'" — the file is deliberately **not**
+    /// re-written in this case (a downgrade must never silently discard fields a newer
+    /// version wrote that this version doesn't know about). `M9`'s `SPEC.md` §8 open
+    /// question 42: the caller enforcing "read-only" (refusing `settings_set_global` for
+    /// the rest of this session) isn't wired up yet — this only guarantees the file itself
+    /// is left untouched.
+    NewerSchema { found_version: u32 },
 }
 
 fn settings_path(config_dir: &Path) -> PathBuf {
@@ -280,7 +320,23 @@ pub fn load(config_dir: &Path) -> std::io::Result<(GlobalSettings, LoadOutcome)>
     };
 
     match serde_json::from_slice::<GlobalSettings>(&bytes) {
-        Ok(settings) => Ok((settings, LoadOutcome::Loaded)),
+        Ok(mut settings) => {
+            if settings.schema_version < CURRENT_SCHEMA_VERSION {
+                let from_version = settings.schema_version;
+                tracing::info!("migrating settings.json from schema v{from_version} to v{CURRENT_SCHEMA_VERSION}");
+                settings.schema_version = CURRENT_SCHEMA_VERSION;
+                save(config_dir, &settings)?;
+                Ok((settings, LoadOutcome::Migrated { from_version }))
+            } else if settings.schema_version > CURRENT_SCHEMA_VERSION {
+                let found_version = settings.schema_version;
+                tracing::warn!(
+                    "settings.json is schema v{found_version} — newer than this app's v{CURRENT_SCHEMA_VERSION}; leaving the file untouched"
+                );
+                Ok((settings, LoadOutcome::NewerSchema { found_version }))
+            } else {
+                Ok((settings, LoadOutcome::Loaded))
+            }
+        }
         Err(_) => {
             let ts = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -432,7 +488,60 @@ mod tests {
         let (settings, outcome) = load(&dir).expect("load");
         assert_eq!(outcome, LoadOutcome::Loaded);
         assert_eq!(settings.toolchain, ToolchainSettings::default());
+        // `M10`: a file predating `updates`/`privacyNoticeAcknowledged` must not fail to
+        // parse, and must not silently opt an existing install out of update checks or
+        // skip a privacy disclosure it never actually showed.
+        assert_eq!(settings.updates, UpdateSettings::default());
+        assert!(settings.updates.check_for_updates);
+        assert!(!settings.privacy_notice_acknowledged);
         assert_eq!(settings.claude, ClaudeSettings::default());
+    }
+
+    /// `M9`/`DATA-MODEL.md` §12: "`schemaVersion` lower than current: migrate in memory,
+    /// re-write atomically, log the migration." `schemaVersion: 0` stands in for "a file
+    /// from before this schema existed" — there's never actually been a shipped v0 (this
+    /// app has only ever had schema v1), so this is the same kind of pre-v1 fixture
+    /// `missing_sections_in_an_older_file_fall_back_to_defaults` already uses, just with an
+    /// explicit lower version number to exercise the bump-and-rewrite path specifically.
+    #[test]
+    fn a_file_with_a_lower_schema_version_is_migrated_and_rewritten() {
+        let dir = tempdir();
+        std::fs::write(
+            settings_path(&dir),
+            br#"{"schemaVersion":0,"claude":{"permissionPolicy":"assisted","model":"opus","maxTurns":null,"showThinking":false,"showCostEstimate":true}}"#,
+        )
+        .unwrap();
+
+        let (settings, outcome) = load(&dir).expect("load");
+        assert_eq!(outcome, LoadOutcome::Migrated { from_version: 0 });
+        assert_eq!(settings.schema_version, CURRENT_SCHEMA_VERSION);
+        // Fields the v0 fixture actually set survive the migration...
+        assert_eq!(settings.claude.model, "opus");
+        // ...and sections it didn't mention at all still fall back to current defaults.
+        assert_eq!(settings.toolchain, ToolchainSettings::default());
+
+        // Re-reading confirms the migration was actually written back to disk, not just
+        // returned in memory for this one call.
+        let (reloaded, outcome2) = load(&dir).expect("reload");
+        assert_eq!(outcome2, LoadOutcome::Loaded);
+        assert_eq!(reloaded.schema_version, CURRENT_SCHEMA_VERSION);
+        assert_eq!(reloaded.claude.model, "opus");
+    }
+
+    #[test]
+    fn a_file_with_a_higher_schema_version_loads_but_is_left_untouched_on_disk() {
+        let dir = tempdir();
+        let raw = br#"{"schemaVersion":99,"claude":{"permissionPolicy":"guarded","model":"a-future-model","maxTurns":null,"showThinking":false,"showCostEstimate":true}}"#;
+        std::fs::write(settings_path(&dir), raw).unwrap();
+
+        let (settings, outcome) = load(&dir).expect("load");
+        assert_eq!(outcome, LoadOutcome::NewerSchema { found_version: 99 });
+        assert_eq!(settings.claude.model, "a-future-model");
+
+        // The file on disk must be byte-identical to what was there before — a downgrade
+        // must never silently discard fields a newer version wrote.
+        let on_disk = std::fs::read(settings_path(&dir)).unwrap();
+        assert_eq!(on_disk, raw);
     }
 
     fn tempdir() -> PathBuf {

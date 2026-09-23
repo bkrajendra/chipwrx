@@ -3,15 +3,16 @@
 
 import { strings } from "../../lib/strings";
 
-export type CanvasTab = "chat" | "logs" | "changes" | "problems" | "monitor" | "project-settings";
+export type CanvasTab = "chat" | "logs" | "changes" | "problems" | "tests" | "monitor" | "project-settings";
 
-const TAB_ORDER: CanvasTab[] = ["chat", "logs", "changes", "problems", "monitor", "project-settings"];
+const TAB_ORDER: CanvasTab[] = ["chat", "logs", "changes", "problems", "tests", "monitor", "project-settings"];
 
 const TAB_LABEL: Record<CanvasTab, string> = {
   chat: strings.tabs.chat,
   logs: strings.tabs.logs,
   changes: strings.tabs.changes,
   problems: strings.tabs.problems,
+  tests: strings.tabs.tests,
   monitor: strings.tabs.monitor,
   "project-settings": strings.tabs.projectSettings,
 };

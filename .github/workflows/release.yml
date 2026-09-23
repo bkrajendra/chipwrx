@@ -1,0 +1,114 @@
+name: Release
+
+# `NFR-D1..D3`/M10: tag-triggered, multi-platform build → signed (where secrets are
+# configured) bundles → one GitHub Release per tag, with every platform's installer and the
+# updater's signed `latest.json` attached. `.github/workflows/pages.yml` re-renders the
+# download page (M10) once this publishes.
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: --target universal-apple-darwin
+          - platform: ubuntu-22.04
+            args: ""
+          - platform: windows-latest
+            args: ""
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Tauri v2 Linux build prerequisites (same as ci.yml): https://v2.tauri.app/start/prerequisites/
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: npm ci
+        run: npm ci
+
+      # Stamps `tauri.conf.json`'s `version` from the tag (e.g. `v1.2.3` -> `1.2.3`) — a
+      # script rather than an inline `tauri build --config` JSON string, so there's no
+      # cross-platform (bash vs. pwsh) shell-quoting to get wrong.
+      - name: Set app version from tag
+        shell: bash
+        run: node scripts/set-tauri-version.mjs "${GITHUB_REF_NAME#v}"
+
+      # Windows Authenticode signing (NFR-D1) — best-effort: only runs when
+      # `WINDOWS_CERTIFICATE`/`WINDOWS_CERTIFICATE_PASSWORD` secrets are configured with a
+      # real code-signing certificate (base64-encoded .pfx). Without them, this step is a
+      # no-op and the MSI/NSIS installer below is built unsigned — still fully functional,
+      # just flagged by SmartScreen until it earns enough reputation. The thumbprint is
+      # written to a config-merge file (not inlined on the command line) to sidestep pwsh
+      # JSON-quoting entirely.
+      - name: Import Windows code-signing certificate
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE) {
+            Write-Host "No WINDOWS_CERTIFICATE secret — building an unsigned Windows installer."
+            exit 0
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "cert.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $securePw = ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText
+          $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePw
+          Remove-Item $pfxPath
+          $configPath = Join-Path $env:RUNNER_TEMP "windows-sign.conf.json"
+          @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint } } } | ConvertTo-Json -Depth 5 | Set-Content -Path $configPath
+          Add-Content -Path $env:GITHUB_ENV -Value "TAURI_WINDOWS_SIGN_ARGS=--config $configPath"
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # NFR-D2: signs the updater manifest (`latest.json`) attached to the release.
+          # Generated once for this repo via `tauri signer generate`
+          # (`src-tauri/updater.key`/`.pub` — the private half is gitignored, never
+          # committed). A production release needs this stored as a real CI secret with a
+          # securely generated password, never the dev placeholder used to create that key.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # macOS signing + notarization (NFR-D1) — best-effort, same story as Windows
+          # above: no-op without a real Apple Developer ID in secrets, producing an
+          # unsigned/unnotarized .dmg that Gatekeeper will block on first launch.
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Vibe Hardware ${{ github.ref_name }}"
+          releaseBody: "Installers for macOS, Windows, and Linux are attached below. See the commit history for what changed."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ format('{0} {1}', matrix.args, env.TAURI_WINDOWS_SIGN_ARGS) }}

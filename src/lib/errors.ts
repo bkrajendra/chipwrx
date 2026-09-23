@@ -95,6 +95,10 @@ const registry: { [C in Code]: (err: Variant<C>) => ErrorRenderInfo } = {
     title: "Unexpected error",
     message: err.message,
   }),
+  SECRET_STORE_FAILED: (err) => ({
+    title: "Couldn't reach the system keychain",
+    message: err.message,
+  }),
 };
 
 export function renderAppError(err: AppError): ErrorRenderInfo {

@@ -125,7 +125,12 @@ If the workspace *is* a git repo, the app also appends `.vibe/` to the repo's
   "advanced": {
     "keepProcessLogs": true,
     "allowUnrestrictedPolicy": false       // reset to false on every app update
-  }
+  },
+
+  "updates": { "checkForUpdates": true },  // NFR-D2: opt-out, doesn't gate the manual button
+
+  "onboardingCompleted": false,
+  "privacyNoticeAcknowledged": false        // NFR-S2: one-time disclosure, shown before onboarding
 }
 ```
 

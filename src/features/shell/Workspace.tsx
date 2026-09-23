@@ -16,6 +16,7 @@ import { DoctorScreen } from "../doctor/DoctorScreen";
 import { IniPanel } from "../ini/IniPanel";
 import { LogsTab } from "../pipeline/LogsTab";
 import { ProblemsTab } from "../pipeline/ProblemsTab";
+import { TestsTab } from "../pipeline/TestsTab";
 import { PipelineStrip } from "../pipeline/PipelineStrip";
 import { usePipeline } from "../pipeline/usePipeline";
 import { PermissionPolicyControl } from "../settings-global/PermissionPolicyControl";
@@ -110,8 +111,11 @@ export function Workspace({ project, onBack }: { project: ProjectEntry; onBack: 
       { id: "tab-logs", label: "Go to Logs", run: () => setTab("logs") },
       { id: "tab-changes", label: "Go to Changes", run: () => setTab("changes") },
       { id: "tab-problems", label: "Go to Problems", run: () => setTab("problems") },
+      { id: "tab-tests", label: "Go to Tests", run: () => setTab("tests") },
       { id: "tab-monitor", label: "Go to Monitor", hint: "⌘M", run: () => setTab("monitor") },
       { id: "tab-project-settings", label: "Go to Project Settings", run: () => setTab("project-settings") },
+      { id: "run-check", label: "Run static analysis (pio check)", run: () => void pipeline.check() },
+      { id: "run-tests", label: "Run tests (pio test)", run: () => void pipeline.test() },
       { id: "new-session", label: strings.shell.newSession, run: () => void chat.newSession() },
       { id: "settings", label: "Open Global Settings", hint: "⌘,", run: () => setSettingsOpen(true) },
       { id: "doctor", label: "Open Doctor", run: () => setDoctorOpen(true) },
@@ -213,8 +217,11 @@ export function Workspace({ project, onBack }: { project: ProjectEntry; onBack: 
                   setTab("chat");
                   void chat.send(prompt);
                 }}
+                onRunCheck={() => void pipeline.check()}
+                checking={pipeline.running}
               />
             )}
+            {tab === "tests" && <TestsTab suites={pipeline.testSuites} running={pipeline.running} onRun={() => void pipeline.test()} />}
             {tab === "monitor" && (
               <MonitorTab
                 workspaceId={project.id}

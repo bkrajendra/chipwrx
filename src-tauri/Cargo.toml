@@ -36,6 +36,22 @@ reqwest = { version = "0.13.5", default-features = false, features = ["rustls", 
 serialport = { version = "4", default-features = false }
 git2 = "0.19"
 tauri-plugin-dialog = "2.7.3"
+# NFR-D2: signed-manifest auto-update, opt-out via `GlobalSettings.updates.checkForUpdates`.
+tauri-plugin-updater = "2"
+# Relaunch after an installed update (NFR-D2) — the updater plugin installs the new binary
+# but doesn't restart the app itself.
+tauri-plugin-process = "2"
+# OS-keychain storage for the optional `ANTHROPIC_API_KEY` (NFR-S1) — Windows Credential
+# Manager, macOS/iOS Keychain, and the Secret Service over D-Bus (GNOME Keyring/KWallet) on
+# Linux. `apple-native-keyring-store` isn't in this crate's own default feature set, so it's
+# listed explicitly here alongside the two defaults this app actually ships on (Windows,
+# Linux) — `NFR-D1`'s three target platforms.
+keyring = { version = "4.2.0", default-features = false, features = [
+    "v1",
+    "windows-native-keyring-store",
+    "apple-native-keyring-store",
+    "zbus-secret-service-keyring-store",
+] }
 
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration

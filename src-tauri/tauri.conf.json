@@ -24,12 +24,32 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    },
+    "linux": {
+      "deb": {},
+      "appimage": {}
+    },
+    "windows": {
+      "nsis": {}
+    }
+  },
+  "plugins": {
+    "updater": {
+      "active": true,
+      "endpoints": [
+        "https://github.com/bkrajendra/chipwrx/releases/latest/download/latest.json"
+      ],
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNDRTYzODRDRDAzNDY3RjMKUldUelp6VFFURGptUENnRDI1d1NTbm5BT1VIOTlKQzBqWCtFTHd0RDdMYjBOWVNaTlFiSmJtNVMK"
+    }
   }
 }

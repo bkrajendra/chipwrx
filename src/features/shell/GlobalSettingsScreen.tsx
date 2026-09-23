@@ -2,11 +2,13 @@
 // model, PlatformIO global settings, Appearance, Editor, Advanced" — a modal rather than a
 // canvas tab since it's workspace-independent (`GlobalSettings` has no per-project scope).
 
+import { relaunch } from "@tauri-apps/plugin-process";
+import { check as checkForUpdate, type Update } from "@tauri-apps/plugin-updater";
 import { useEffect, useState } from "react";
 import { useEscapeToClose } from "./useEscapeToClose";
-import type { AppError, GlobalSettings, ThemeSetting, ToolchainTool } from "../../lib/bindings";
+import type { AppError, AppInfo, GlobalSettings, ThemeSetting, ToolchainTool } from "../../lib/bindings";
 import { renderAppError } from "../../lib/errors";
-import { settingsGetGlobal, settingsSetGlobal, toolchainSetPath } from "../../lib/ipc";
+import { appInfoGet, secretsClearApiKey, secretsHasApiKey, secretsSetApiKey, settingsGetGlobal, settingsSetGlobal, toolchainSetPath } from "../../lib/ipc";
 import { patchSection } from "../../lib/settings";
 import { strings } from "../../lib/strings";
 import { PioSettingsTab } from "../ini/PioSettingsTab";
@@ -19,7 +21,7 @@ function describe(e: unknown): string {
   return isAppError(e) ? renderAppError(e).message : String(e);
 }
 
-type SettingsTab = "toolchain" | "claude" | "pio" | "appearance" | "editor" | "advanced";
+type SettingsTab = "toolchain" | "claude" | "pio" | "appearance" | "editor" | "advanced" | "about";
 
 const inputClass = "w-full rounded border border-neutral-300 bg-white px-2 py-1 text-xs text-neutral-900 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100";
 
@@ -67,6 +69,86 @@ function ToolchainSection({ settings, onChanged }: { settings: GlobalSettings; o
   );
 }
 
+/** `NFR-S1`: the optional `ANTHROPIC_API_KEY` — lives in the OS keychain, never in
+ * `settings.json`. Only "set" vs. "not set" is ever fetched; the value itself is
+ * write-only from this screen. */
+function ApiKeySection() {
+  const [hasKey, setHasKey] = useState<boolean | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = () => void secretsHasApiKey().then(setHasKey);
+  useEffect(refresh, []);
+
+  const save = async () => {
+    if (!draft.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await secretsSetApiKey(draft.trim());
+      setDraft("");
+      refresh();
+    } catch (e) {
+      setError(describe(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const clear = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await secretsClearApiKey();
+      refresh();
+    } catch (e) {
+      setError(describe(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+      <span className="block font-medium">Anthropic API key (optional)</span>
+      <p className="text-neutral-500 dark:text-neutral-400">
+        Stored in the OS keychain, never in a config file. When set, it's used for turns instead of subscription auth.
+      </p>
+      {error && <p className="text-red-500">{error}</p>}
+      <p className="text-neutral-600 dark:text-neutral-400">{hasKey === null ? "Checking…" : hasKey ? "A key is set." : "No key set."}</p>
+      <div className="flex gap-2">
+        <input
+          type="password"
+          placeholder="sk-ant-…"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          className={inputClass}
+          autoComplete="off"
+        />
+        <button
+          type="button"
+          onClick={() => void save()}
+          disabled={busy || !draft.trim()}
+          className="shrink-0 rounded border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+        >
+          Save
+        </button>
+        {hasKey && (
+          <button
+            type="button"
+            onClick={() => void clear()}
+            disabled={busy}
+            className="shrink-0 rounded border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 disabled:opacity-40 dark:border-neutral-700 dark:hover:bg-neutral-800"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ClaudeSection({ settings, onChanged }: { settings: GlobalSettings; onChanged: (s: GlobalSettings) => void }) {
   const set = async (overrides: Partial<GlobalSettings["claude"]>) => {
     onChanged(await settingsSetGlobal(patchSection(settings, "claude", overrides)));
@@ -85,6 +167,7 @@ function ClaudeSection({ settings, onChanged }: { settings: GlobalSettings; onCh
         <input type="checkbox" checked={settings.claude.showCostEstimate} onChange={(e) => void set({ showCostEstimate: e.target.checked })} />
         Show cost estimate
       </label>
+      <ApiKeySection />
     </div>
   );
 }
@@ -150,6 +233,94 @@ function AdvancedSection({ settings, onChanged }: { settings: GlobalSettings; on
   );
 }
 
+type UpdateStage = "idle" | "checking" | "up-to-date" | "available" | "installing" | "ready" | "failed";
+
+/** `NFR-D2`/`NFR-D3`: version + git SHA, and the opt-out update check. `check()` talks to
+ * the signed manifest at the endpoint in `tauri.conf.json`'s `plugins.updater` — it fails
+ * (rejects) in `tauri dev`/unsigned local builds with no real release to compare against,
+ * which is surfaced as the ordinary "failed" state rather than thrown at the caller. */
+function AboutSection({ settings, onChanged }: { settings: GlobalSettings; onChanged: (s: GlobalSettings) => void }) {
+  const [info, setInfo] = useState<AppInfo | null>(null);
+  const [stage, setStage] = useState<UpdateStage>("idle");
+  const [update, setUpdate] = useState<Update | null>(null);
+
+  useEffect(() => {
+    void appInfoGet().then(setInfo);
+  }, []);
+
+  const setAutoCheck = async (value: boolean) => {
+    onChanged(await settingsSetGlobal(patchSection(settings, "updates", { checkForUpdates: value })));
+  };
+
+  const runCheck = async () => {
+    setStage("checking");
+    try {
+      const found = await checkForUpdate();
+      if (found?.available) {
+        setUpdate(found);
+        setStage("available");
+      } else {
+        setStage("up-to-date");
+      }
+    } catch {
+      setStage("failed");
+    }
+  };
+
+  const install = async () => {
+    if (!update) return;
+    setStage("installing");
+    try {
+      await update.downloadAndInstall();
+      setStage("ready");
+    } catch {
+      setStage("failed");
+    }
+  };
+
+  return (
+    <div className="space-y-4 text-xs">
+      <div className="space-y-1">
+        <p className="font-medium">Vibe Hardware {info?.version ?? "…"}</p>
+        <p className="text-neutral-500 dark:text-neutral-400">Build {info?.gitSha ?? "…"}</p>
+      </div>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={settings.updates.checkForUpdates} onChange={(e) => void setAutoCheck(e.target.checked)} />
+        {strings.about.checkForUpdates}
+      </label>
+      <div className="space-y-2 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+        {stage === "idle" && (
+          <button type="button" onClick={() => void runCheck()} className="rounded border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+            {strings.about.checkNow}
+          </button>
+        )}
+        {stage === "checking" && <p className="text-neutral-500 dark:text-neutral-400">{strings.about.checking}</p>}
+        {stage === "up-to-date" && <p className="text-neutral-500 dark:text-neutral-400">{strings.about.upToDate}</p>}
+        {stage === "failed" && <p className="text-red-500">{strings.about.checkFailed}</p>}
+        {stage === "available" && update && (
+          <div className="space-y-2">
+            <p>
+              {strings.about.updateAvailable}: {update.version}
+            </p>
+            <button type="button" onClick={() => void install()} className="rounded border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+              {strings.about.downloadAndInstall}
+            </button>
+          </div>
+        )}
+        {stage === "installing" && <p className="text-neutral-500 dark:text-neutral-400">{strings.about.installing}</p>}
+        {stage === "ready" && (
+          <div className="space-y-2">
+            <p>{strings.about.restartToFinish}</p>
+            <button type="button" onClick={() => void relaunch()} className="rounded border border-neutral-300 px-2.5 py-1 font-medium hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-800">
+              {strings.about.restartNow}
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function GlobalSettingsScreen({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [settings, setSettings] = useState<GlobalSettings | null>(null);
   const [tab, setTab] = useState<SettingsTab>("toolchain");
@@ -168,6 +339,7 @@ export function GlobalSettingsScreen({ open, onClose }: { open: boolean; onClose
     { id: "appearance", label: strings.settings.appearance },
     { id: "editor", label: strings.settings.editor },
     { id: "advanced", label: strings.settings.advanced },
+    { id: "about", label: strings.settings.about },
   ];
 
   return (
@@ -205,6 +377,7 @@ export function GlobalSettingsScreen({ open, onClose }: { open: boolean; onClose
             {tab === "appearance" && <AppearanceSection />}
             {settings && tab === "editor" && <EditorSection settings={settings} onChanged={setSettings} />}
             {settings && tab === "advanced" && <AdvancedSection settings={settings} onChanged={setSettings} />}
+            {settings && tab === "about" && <AboutSection settings={settings} onChanged={setSettings} />}
           </div>
         </div>
       </div>

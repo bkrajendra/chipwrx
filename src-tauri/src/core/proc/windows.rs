@@ -16,7 +16,30 @@ use windows_sys::Win32::System::JobObjects::{
     SetInformationJobObject, TerminateJobObject, JOBOBJECT_BASIC_LIMIT_INFORMATION,
     JOBOBJECT_EXTENDED_LIMIT_INFORMATION, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
 };
-use windows_sys::Win32::System::Threading::CREATE_NEW_PROCESS_GROUP;
+use windows_sys::Win32::System::Threading::{
+    OpenProcess, TerminateProcess, CREATE_NEW_PROCESS_GROUP, PROCESS_TERMINATE,
+};
+
+/// `M9`: used by `reap_orphans_from_previous_run` against a raw pid from a *previous*
+/// process's on-disk registry, not a live `Handle`/`Child` — there's no job-object handle
+/// left to terminate-via-close (that died with the previous process), so this opens the pid
+/// directly. A pid that's gone at all fails `OpenProcess` and is correctly skipped. A pid
+/// the OS has since recycled for an unrelated process is the one real risk this accepts
+/// (`SPEC.md` §8 open question 40): if that unrelated process happens to be owned by the
+/// same user (most processes are), this *will* terminate it. No generation/start-time check
+/// guards against it — narrow window, but not zero. Returns `true` if the pid was alive
+/// (and has now been terminated), `false` otherwise.
+pub fn kill_if_alive(pid: u32) -> bool {
+    unsafe {
+        let handle = OpenProcess(PROCESS_TERMINATE, 0, pid);
+        if handle.is_null() {
+            return false;
+        }
+        TerminateProcess(handle, 1);
+        CloseHandle(handle);
+    }
+    true
+}
 
 pub fn prepare(cmd: &mut tokio::process::Command) {
     // Lets us target the whole tree with GenerateConsoleCtrlEvent for a "soft" interrupt.

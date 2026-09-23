@@ -35,6 +35,22 @@ impl Killer for UnixKiller {
     }
 }
 
+/// `M9`: used by `reap_orphans_from_previous_run` against a raw pid from a *previous*
+/// process's on-disk registry, not a live `Handle` — `kill(pid, 0)` is the standard
+/// liveness probe (no signal actually sent), and a `SIGKILL` here is unconditional since
+/// there's nothing left to negotiate a graceful shutdown with. A pid the OS has since
+/// recycled for an unrelated process is the one real risk this accepts (`SPEC.md` §8 open
+/// question 40) — no generation/start-time check guards against it. Returns `true` if the
+/// pid was alive (and has now been killed), `false` if it was already gone.
+pub fn kill_if_alive(pid: u32) -> bool {
+    let pid = pid as i32;
+    if unsafe { libc::kill(pid, 0) } != 0 {
+        return false;
+    }
+    unsafe { libc::kill(pid, libc::SIGKILL) };
+    true
+}
+
 fn send(pgid: i32, sig: i32) -> std::io::Result<()> {
     // Negative pid targets the whole process group (`man 2 kill`).
     let rc = unsafe { libc::kill(-pgid, sig) };

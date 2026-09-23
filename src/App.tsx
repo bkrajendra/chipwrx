@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { DoctorScreen } from "./features/doctor/DoctorScreen";
 import { Onboarding } from "./features/onboarding/Onboarding";
+import { PrivacyNotice } from "./features/onboarding/PrivacyNotice";
 import { LauncherScreen } from "./features/launcher/LauncherScreen";
 import { Modal } from "./features/shell/Modal";
 import { Workspace } from "./features/shell/Workspace";
@@ -19,6 +20,7 @@ function App() {
   useTheme();
   const [workspace, setWorkspace] = useState<ProjectEntry | null>(null);
   const [onboardingDone, setOnboardingDone] = useState<boolean | null>(null);
+  const [privacyAcknowledged, setPrivacyAcknowledged] = useState<boolean | null>(null);
   const [resolvingUrlWorkspace, setResolvingUrlWorkspace] = useState(true);
   const [doctorOpen, setDoctorOpen] = useState(false);
 
@@ -36,10 +38,13 @@ function App() {
   }, []);
 
   useEffect(() => {
-    void settingsGetGlobal().then((s) => setOnboardingDone(s.onboardingCompleted));
+    void settingsGetGlobal().then((s) => {
+      setOnboardingDone(s.onboardingCompleted);
+      setPrivacyAcknowledged(s.privacyNoticeAcknowledged);
+    });
   }, []);
 
-  if (resolvingUrlWorkspace || onboardingDone === null) {
+  if (resolvingUrlWorkspace || onboardingDone === null || privacyAcknowledged === null) {
     return <main className="flex h-screen w-screen items-center justify-center bg-neutral-50 text-sm text-neutral-500 dark:bg-neutral-950 dark:text-neutral-400">Loading…</main>;
   }
 
@@ -47,6 +52,14 @@ function App() {
     return (
       <main className="h-screen w-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
         <Workspace project={workspace} onBack={() => setWorkspace(null)} />
+      </main>
+    );
+  }
+
+  if (!privacyAcknowledged) {
+    return (
+      <main className="flex h-screen w-screen flex-col bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
+        <PrivacyNotice onAcknowledged={() => setPrivacyAcknowledged(true)} />
       </main>
     );
   }

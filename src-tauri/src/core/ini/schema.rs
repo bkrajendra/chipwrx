@@ -102,7 +102,12 @@ pub fn save_cache(cache_dir: &Path, core_version: &str, json: &str) -> Result<()
     std::fs::create_dir_all(cache_dir)?;
     let path = cache_path(cache_dir, core_version);
     let tmp = cache_dir.join(format!("pio-schema-{core_version}.json.tmp-{}", std::process::id()));
-    std::fs::write(&tmp, json)?;
+    {
+        use std::io::Write;
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(json.as_bytes())?;
+        f.sync_all()?;
+    }
     std::fs::rename(&tmp, &path)?;
     Ok(())
 }

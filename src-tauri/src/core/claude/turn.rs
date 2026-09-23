@@ -33,6 +33,9 @@ pub struct RunTurnRequest<'a> {
     pub policy: PermissionPolicySetting,
     pub model: &'a str,
     pub permission_prompts_none_supported: bool,
+    /// Additive child-process env — `NFR-S1`: the optional `ANTHROPIC_API_KEY` from the OS
+    /// keychain, injected here only (never written to argv, never logged unredacted).
+    pub env: Vec<(String, String)>,
 }
 
 /// Spawns the turn and returns immediately with its `ProcId` (for `claude_stop_turn`);
@@ -55,7 +58,7 @@ pub async fn run_turn(
         program: req.claude.program.clone(),
         args,
         cwd: req.workspace.to_path_buf(),
-        env: vec![],
+        env: req.env,
         kind: ProcKind::Claude,
         label: "claude-turn".into(),
     };

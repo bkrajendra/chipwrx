@@ -8,13 +8,15 @@ use crate::commands::util::{cache_dir, run_blocking};
 use crate::core::device::broker::{LeaseHolder, PortBroker};
 use crate::core::device::monitor::MonitorEvent;
 use crate::core::pio::build_history::{self, BuildKind, BuildRecord, BuildSize, DefectCount};
+use crate::core::pio::check as pio_check;
 use crate::core::pio::pipeline::{self, PipelineRegistry, PipelineState, PipelineStep};
 use crate::core::pio::run as pio_run;
 use crate::core::pio::targets::{self, TargetInfo, UNIVERSAL_TARGETS};
+use crate::core::pio::test as pio_test;
 use crate::core::project::registry;
 use crate::core::project::workspace;
-use crate::core::proc::events::{ProcEvent, Severity, SizeUsage};
-use crate::core::proc::{ProcId, ProcKind, ProcessSupervisor, SpawnSpec};
+use crate::core::proc::events::{spawn_with_proc_events, ProcEvent, Severity, SizeUsage};
+use crate::core::proc::{ProcId, ProcKind, ProcessSupervisor, SpawnSpec, StdStream};
 use crate::core::settings::PipelinePolicySetting;
 use crate::core::snapshot::engine as snapshot_engine;
 use crate::core::toolchain::probes;
@@ -423,7 +425,7 @@ pub async fn pipeline_upload(
     // it — stopping it now (freeing the port) and reattaching once the upload finishes.
     let auto_reattach = settings_state.0.lock().await.pipeline.auto_reattach_monitor;
     let reattach_monitor = if auto_reattach {
-        match (monitor_state.preempt_for_upload(&workspace).await, &preferred_port) {
+        match (monitor_state.preempt(&workspace, "Upload").await, &preferred_port) {
             (Some(channel), Some(port)) => Some((port.clone(), channel)),
             _ => None,
         }
@@ -476,6 +478,166 @@ pub async fn pipeline_run_target(
         while let Some(ev) = rx.recv().await {
             let _ = on_event.send(ev);
         }
+        let active_procs = app_for_task.state::<ActivePipelineProcs>();
+        active_procs.0.lock().await.remove(&ws_for_task);
+    });
+
+    Ok(proc_id)
+}
+
+/// Accumulates a spawned pio process's stdout as it streams by (needed because `pio check`/
+/// `pio test --json-output` each print their structured result as a single JSON blob at the
+/// very end, not incrementally per line the way build diagnostics are) — forwarding every
+/// event unchanged to `on_event` as it arrives, and returning the full stdout once
+/// `Finished` is seen.
+async fn forward_and_capture_stdout(mut rx: tokio::sync::mpsc::UnboundedReceiver<ProcEvent>, on_event: &Channel<ProcEvent>) -> String {
+    let mut stdout_buf = String::new();
+    while let Some(ev) = rx.recv().await {
+        if let ProcEvent::Lines { lines, .. } = &ev {
+            for l in lines {
+                if matches!(l.stream, StdStream::Stdout) {
+                    stdout_buf.push_str(&l.text);
+                    stdout_buf.push('\n');
+                }
+            }
+        }
+        let finished = matches!(ev, ProcEvent::Finished { .. });
+        let _ = on_event.send(ev);
+        if finished {
+            break;
+        }
+    }
+    stdout_buf
+}
+
+/// `FR-BUILD-9`: static analysis feeding the same Problems list as build diagnostics —
+/// `pio check --json-output`'s result is synthesized into `ProcEvent::Defect` events
+/// (`source: Check`) once the run finishes, on top of the raw `Started`/`Lines`/`Finished`
+/// events every pio-backed command streams.
+#[tauri::command]
+pub async fn pipeline_check(
+    app: AppHandle,
+    supervisor: State<'_, ProcessSupervisor>,
+    settings_state: State<'_, SettingsState>,
+    registry_state: State<'_, ProjectRegistryState>,
+    workspace: String,
+    on_event: Channel<ProcEvent>,
+) -> Result<ProcId, AppError> {
+    let (dir, env) = workspace_dir_and_env(&registry_state, &workspace).await?;
+    let pio = resolved_pio(&supervisor, &settings_state).await.ok_or_else(|| AppError::ToolMissing {
+        tool: "pio".into(),
+        install_action: true,
+    })?;
+    let mut args = pio.extra_args.clone();
+    args.extend(pio_check::check_args(&dir, &env));
+    let spec = SpawnSpec {
+        program: pio.program.clone(),
+        args,
+        cwd: dir,
+        env: vec![],
+        kind: ProcKind::Pio,
+        label: "pio-check".into(),
+    };
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let proc_id = spawn_with_proc_events(&supervisor, spec, tx).await?;
+    {
+        let active_procs = app.state::<ActivePipelineProcs>();
+        active_procs.0.lock().await.insert(workspace.clone(), proc_id.clone());
+    }
+
+    let app_for_task = app.clone();
+    let ws_for_task = workspace.clone();
+    let event_proc_id = proc_id.clone();
+    tokio::spawn(async move {
+        let stdout = forward_and_capture_stdout(rx, &on_event).await;
+        for defect in pio_check::parse_check_json(&stdout) {
+            let _ = on_event.send(ProcEvent::Defect {
+                proc_id: event_proc_id.clone(),
+                defect,
+            });
+        }
+        let active_procs = app_for_task.state::<ActivePipelineProcs>();
+        active_procs.0.lock().await.remove(&ws_for_task);
+    });
+
+    Ok(proc_id)
+}
+
+/// `FR-BUILD-10`: unit tests, rendered as a pass/fail list — `pio test --json-output`'s
+/// result is synthesized into one `ProcEvent::TestResult` per environment once the run
+/// finishes. `CLI-CONTRACT.md` §5.3: running tests uploads and runs over the serial port,
+/// so this preempts a running monitor exactly as `pipeline_upload` does and reattaches it
+/// afterward.
+#[tauri::command]
+pub async fn pipeline_test(
+    app: AppHandle,
+    supervisor: State<'_, ProcessSupervisor>,
+    settings_state: State<'_, SettingsState>,
+    registry_state: State<'_, ProjectRegistryState>,
+    monitor_state: State<'_, MonitorState>,
+    workspace: String,
+    on_event: Channel<ProcEvent>,
+) -> Result<ProcId, AppError> {
+    let (dir, env) = workspace_dir_and_env(&registry_state, &workspace).await?;
+    let pio = resolved_pio(&supervisor, &settings_state).await.ok_or_else(|| AppError::ToolMissing {
+        tool: "pio".into(),
+        install_action: true,
+    })?;
+    let preferred_port = workspace::load(&dir).ok().flatten().and_then(|s| s.device.preferred_port);
+
+    let auto_reattach = settings_state.0.lock().await.pipeline.auto_reattach_monitor;
+    let reattach_monitor = if auto_reattach {
+        match (monitor_state.preempt(&workspace, "Test").await, &preferred_port) {
+            (Some(channel), Some(port)) => Some((port.clone(), channel)),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
+    let mut args = pio.extra_args.clone();
+    args.extend(pio_test::test_args(&dir, &env, preferred_port.as_deref()));
+    let spec = SpawnSpec {
+        program: pio.program.clone(),
+        args,
+        cwd: dir.clone(),
+        env: vec![],
+        kind: ProcKind::Pio,
+        label: "pio-test".into(),
+    };
+    let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+    let proc_id = spawn_with_proc_events(&supervisor, spec, tx).await?;
+    {
+        let active_procs = app.state::<ActivePipelineProcs>();
+        active_procs.0.lock().await.insert(workspace.clone(), proc_id.clone());
+    }
+
+    let app_for_task = app.clone();
+    let dir_for_task = dir.clone();
+    let env_for_task = env.clone();
+    let ws_for_task = workspace.clone();
+    let event_proc_id = proc_id.clone();
+    tokio::spawn(async move {
+        let stdout = forward_and_capture_stdout(rx, &on_event).await;
+        for suite in pio_test::parse_test_json(&stdout) {
+            let _ = on_event.send(ProcEvent::TestResult {
+                proc_id: event_proc_id.clone(),
+                suite,
+            });
+        }
+
+        if let Some((port, monitor_events)) = reattach_monitor {
+            let broker = app_for_task.state::<PortBroker>();
+            if let Ok(lease) = broker.acquire(&port, LeaseHolder::Monitor, false) {
+                if monitor::start_session(&app_for_task, &dir_for_task, &env_for_task, &ws_for_task, &port, lease, &monitor_events)
+                    .await
+                    .is_ok()
+                {
+                    let _ = monitor_events.send(MonitorEvent::Reattached { port });
+                }
+            }
+        }
+
         let active_procs = app_for_task.state::<ActivePipelineProcs>();
         active_procs.0.lock().await.remove(&ws_for_task);
     });

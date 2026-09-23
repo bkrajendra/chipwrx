@@ -12,6 +12,11 @@ dist
 dist-ssr
 *.local
 
+# Tauri updater signing key (M10/NFR-D2) — the private half must never be committed.
+# CI signs releases from the `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD` secrets instead; this
+# gitignored local file is only for `npm run tauri dev`-time update testing on this machine.
+src-tauri/updater.key
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

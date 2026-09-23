@@ -1,8 +1,16 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AppError, Defect, PipelineState, ProcEvent, SizeUsage } from "../../lib/bindings";
+import type { AppError, Defect, PipelineState, ProcEvent, SizeUsage, TestSuite } from "../../lib/bindings";
 import { renderAppError } from "../../lib/errors";
-import { pipelineBuild, pipelineRunTarget, pipelineState as fetchPipelineState, pipelineStop, pipelineUpload } from "../../lib/ipc";
+import {
+  pipelineBuild,
+  pipelineCheck,
+  pipelineRunTarget,
+  pipelineState as fetchPipelineState,
+  pipelineStop,
+  pipelineTest,
+  pipelineUpload,
+} from "../../lib/ipc";
 
 function isAppError(e: unknown): e is AppError {
   return typeof e === "object" && e !== null && "code" in e;
@@ -32,6 +40,7 @@ export function usePipeline(workspaceId: string, maxLines: number = DEFAULT_MAX_
   const [state, setState] = useState<PipelineState | null>(null);
   const [lines, setLines] = useState<LogLineView[]>([]);
   const [defects, setDefects] = useState<Defect[]>([]);
+  const [testSuites, setTestSuites] = useState<TestSuite[]>([]);
   const [size, setSize] = useState<SizeUsage | null>(null);
   const [stage, setStage] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
@@ -56,6 +65,7 @@ export function usePipeline(workspaceId: string, maxLines: number = DEFAULT_MAX_
         setProcId(ev.data.procId);
         setLines([]);
         setDefects([]);
+        setTestSuites([]);
         setSize(null);
         setStage(null);
         setRunning(true);
@@ -68,6 +78,9 @@ export function usePipeline(workspaceId: string, maxLines: number = DEFAULT_MAX_
         break;
       case "defect":
         setDefects((prev) => [...prev, ev.data.defect]);
+        break;
+      case "testResult":
+        setTestSuites((prev) => [...prev, ev.data.suite]);
         break;
       case "size":
         setSize(ev.data.usage);
@@ -102,10 +115,12 @@ export function usePipeline(workspaceId: string, maxLines: number = DEFAULT_MAX_
     (target: string) => run(() => pipelineRunTarget(workspaceId, target, handleEvent)),
     [run, workspaceId, handleEvent],
   );
+  const check = useCallback(() => run(() => pipelineCheck(workspaceId, handleEvent)), [run, workspaceId, handleEvent]);
+  const test = useCallback(() => run(() => pipelineTest(workspaceId, handleEvent)), [run, workspaceId, handleEvent]);
 
   const stop = useCallback(() => {
     if (procIdRef.current) void pipelineStop(procIdRef.current);
   }, []);
 
-  return { state, lines, defects, size, stage, running, procId, error, build, upload, runTarget, stop };
+  return { state, lines, defects, testSuites, size, stage, running, procId, error, build, upload, runTarget, check, test, stop };
 }
