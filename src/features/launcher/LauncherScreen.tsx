@@ -55,6 +55,12 @@ function TrustPrompt({ path, onTrusted, onCancel }: { path: string; id: string; 
   );
 }
 
+/** The whole row opens the workspace (a `Chat` button used to be the only way in, and its
+ * height varied with how many lines the name/path wrapped to, so rows never lined up).
+ * `Reveal`/`Open in editor` stay as small secondary actions that stop propagation so they
+ * don't also trigger the row's own click. Not a `<button>` itself — it contains real
+ * buttons, and nesting interactive elements is invalid HTML — so it gets `role="button"`
+ * and a `keydown` handler instead. */
 function ProjectRow({
   entry,
   onOpenInEditor,
@@ -66,9 +72,28 @@ function ProjectRow({
   onReveal: () => void;
   onOpenChat: () => void;
 }) {
+  const openable = entry.exists;
+
   return (
-    <div className="flex items-center justify-between border-b border-neutral-200 py-2.5 last:border-0 dark:border-neutral-800">
-      <div>
+    <div
+      role={openable ? "button" : undefined}
+      tabIndex={openable ? 0 : undefined}
+      onClick={openable ? onOpenChat : undefined}
+      onKeyDown={
+        openable
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onOpenChat();
+              }
+            }
+          : undefined
+      }
+      className={`flex items-center justify-between gap-3 border-b border-neutral-200 py-2.5 last:border-0 dark:border-neutral-800 ${
+        openable ? "cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-900/50" : ""
+      }`}
+    >
+      <div className="min-w-0">
         <div className="flex items-center gap-2 text-sm font-medium">
           {entry.name}
           {!entry.exists && (
@@ -82,24 +107,31 @@ function ProjectRow({
             </span>
           )}
         </div>
-        <div className="text-xs text-neutral-500 dark:text-neutral-400">
+        <div className="truncate text-xs text-neutral-500 dark:text-neutral-400">
           {entry.path} {entry.boardId ? `· ${entry.boardId}` : ""}
         </div>
       </div>
       {entry.exists && (
-        <div className="flex gap-2">
-          <button type="button" onClick={onReveal} className="text-xs text-neutral-500 hover:underline dark:text-neutral-400">
+        <div className="flex shrink-0 gap-3">
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onReveal();
+            }}
+            className="text-xs text-neutral-500 hover:underline dark:text-neutral-400"
+          >
             Reveal
-          </button>
-          <button type="button" onClick={onOpenInEditor} className="text-xs text-neutral-500 hover:underline dark:text-neutral-400">
-            Open in editor
           </button>
           <button
             type="button"
-            onClick={onOpenChat}
-            className="rounded bg-neutral-900 px-2 py-0.5 text-xs font-medium text-neutral-50 dark:bg-neutral-100 dark:text-neutral-900"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenInEditor();
+            }}
+            className="text-xs text-neutral-500 hover:underline dark:text-neutral-400"
           >
-            Chat
+            Open in editor
           </button>
         </div>
       )}
@@ -155,7 +187,7 @@ export function LauncherScreen({ onOpenWorkspace }: { onOpenWorkspace: (entry: P
   };
 
   return (
-    <div className="mx-auto max-w-xl px-4 py-6">
+    <div className="mx-auto max-w-2xl px-4 py-6">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-semibold">Projects</h2>
         <div className="flex gap-2">

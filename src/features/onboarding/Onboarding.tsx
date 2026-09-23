@@ -33,29 +33,42 @@ function StepDots({ step }: { step: Step }) {
 }
 
 function ToolchainStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => void }) {
-  const { report, install } = useDoctor();
+  const { report, loading, install } = useDoctor();
   const claude = report?.claudeBinary;
   const pio = report?.pioBinary;
+  // Probing takes a moment (concurrent, timeout-bounded — `TOOLCHAIN-SETUP.md` §9) — show a
+  // loading state rather than the "not found" / Install button while `report` is still
+  // `null`, which otherwise flashes a misleading "please install this" for tools that are
+  // actually already there.
+  const detecting = loading && !report;
   return (
     <div>
       <h3 className="mb-2 text-sm font-semibold">{strings.onboarding.step1Title}</h3>
       <div className="mb-4 space-y-2 text-xs">
-        <div className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
-          <span>Claude Code {claude?.status === "ok" ? `✓ ${claude.version}` : "✗ not found"}</span>
-          {claude?.status !== "ok" && (
-            <button type="button" onClick={() => void install("installClaude")} className={secondaryButton}>
-              Install
-            </button>
-          )}
-        </div>
-        <div className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
-          <span>PlatformIO {pio?.status === "ok" ? `✓ ${pio.version}` : "✗ not found"}</span>
-          {pio?.status !== "ok" && (
-            <button type="button" onClick={() => void install("installPio")} className={secondaryButton}>
-              Install
-            </button>
-          )}
-        </div>
+        {detecting ? (
+          <p className="rounded border border-neutral-200 px-3 py-2 text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+            Detecting installed toolchain…
+          </p>
+        ) : (
+          <>
+            <div className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
+              <span>Claude Code {claude?.status === "ok" ? `✓ ${claude.version}` : "✗ not found"}</span>
+              {claude?.status !== "ok" && (
+                <button type="button" onClick={() => void install("installClaude")} className={secondaryButton}>
+                  Install
+                </button>
+              )}
+            </div>
+            <div className="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 dark:border-neutral-800">
+              <span>PlatformIO {pio?.status === "ok" ? `✓ ${pio.version}` : "✗ not found"}</span>
+              {pio?.status !== "ok" && (
+                <button type="button" onClick={() => void install("installPio")} className={secondaryButton}>
+                  Install
+                </button>
+              )}
+            </div>
+          </>
+        )}
       </div>
       <div className="flex justify-between">
         <button type="button" onClick={onSkip} className={secondaryButton}>
@@ -70,24 +83,31 @@ function ToolchainStep({ onNext, onSkip }: { onNext: () => void; onSkip: () => v
 }
 
 function SignInStep({ onNext, onBack, onSkip }: { onNext: () => void; onBack: () => void; onSkip: () => void }) {
-  const { report, authenticate, refresh } = useDoctor();
+  const { report, loading, authenticate, refresh } = useDoctor();
   const auth = report?.claudeAuth;
+  const detecting = loading && !report;
   return (
     <div>
       <h3 className="mb-2 text-sm font-semibold">{strings.onboarding.step2Title}</h3>
       <div className="mb-4 flex items-center justify-between rounded border border-neutral-200 px-3 py-2 text-xs dark:border-neutral-800">
-        <span>Claude Code {auth?.status === "ok" ? "— signed in ✓" : "— not signed in"}</span>
-        {auth?.status !== "ok" && (
-          <button
-            type="button"
-            onClick={() => {
-              void authenticate();
-              setTimeout(() => void refresh(true), 3000);
-            }}
-            className={secondaryButton}
-          >
-            Sign in
-          </button>
+        {detecting ? (
+          <span className="text-neutral-500 dark:text-neutral-400">Checking sign-in status…</span>
+        ) : (
+          <>
+            <span>Claude Code {auth?.status === "ok" ? "— signed in ✓" : "— not signed in"}</span>
+            {auth?.status !== "ok" && (
+              <button
+                type="button"
+                onClick={() => {
+                  void authenticate();
+                  setTimeout(() => void refresh(true), 3000);
+                }}
+                className={secondaryButton}
+              >
+                Sign in
+              </button>
+            )}
+          </>
         )}
       </div>
       <div className="flex justify-between">
@@ -111,7 +131,7 @@ function ProjectStep({ onOpened, onBack, onSkip }: { onOpened: (p: ProjectEntry)
   return (
     <div>
       <h3 className="mb-2 text-sm font-semibold">{strings.onboarding.step3Title}</h3>
-      <div className="mb-4 max-h-[40vh] overflow-y-auto rounded border border-neutral-200 dark:border-neutral-800">
+      <div className="mb-4 max-h-[55vh] overflow-y-auto rounded border border-neutral-200 dark:border-neutral-800">
         <LauncherScreen onOpenWorkspace={onOpened} />
       </div>
       <div className="flex justify-between">
@@ -161,8 +181,12 @@ export function Onboarding({ onDone }: { onDone: (opened: ProjectEntry | null) =
     onDone(openedProject);
   };
 
+  // Step 3 (project list) reads much better with more room — paths and board ids wrap
+  // heavily at the same narrow width that suits the other, form-like steps.
+  const containerWidth = step === 3 ? "max-w-4xl" : "max-w-lg";
+
   return (
-    <div className="mx-auto flex h-full max-w-lg flex-col justify-center px-4 py-6">
+    <div className={`mx-auto flex h-full w-full ${containerWidth} flex-col justify-center px-4 py-6`}>
       <h1 className="mb-1 text-lg font-semibold">{strings.onboarding.title}</h1>
       <StepDots step={step} />
       {step === 1 && <ToolchainStep onNext={() => setStep(2)} onSkip={finish} />}

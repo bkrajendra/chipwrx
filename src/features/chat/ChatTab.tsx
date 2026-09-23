@@ -190,7 +190,7 @@ export function ChatTab({
   return (
     <div className="flex h-full flex-col">
       <div className="flex-1 overflow-y-auto px-4 py-4">
-        <div className="mx-auto max-w-2xl space-y-4">
+        <div className="mx-auto max-w-4xl space-y-4">
           {loadingHistory && history.length === 0 && <p className="text-sm text-neutral-500 dark:text-neutral-400">Loading conversation…</p>}
           {!loadingHistory && history.length === 0 && !live && <p className="text-sm text-neutral-500 dark:text-neutral-400">Say what you'd like to build.</p>}
           {history.map((t) => (
@@ -203,7 +203,7 @@ export function ChatTab({
 
       {error && <p className="px-4 pb-2 text-xs text-red-500">{error}</p>}
 
-      <div className="mx-auto w-full max-w-2xl">
+      <div className="mx-auto w-full max-w-4xl">
         <PromptDeck workspaceId={workspaceId} running={running} history={history.map((t) => t.prompt)} onSend={handleSend} onStop={stop} />
       </div>
     </div>
